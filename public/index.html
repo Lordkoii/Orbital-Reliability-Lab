@@ -6,6 +6,7 @@
   <title>Orbital Reliability Lab</title>
   <meta name="description" content="A systems reliability, automation, and operations engineering lab for high-consequence factory and mission environments." />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/v03.css" />
 </head>
 <body>
   <div class="stars"></div>
@@ -13,36 +14,23 @@
     <header class="topbar">
       <div class="brand">
         <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div>
-          <p class="eyebrow">HIGH-CONSEQUENCE SYSTEMS / RELIABILITY ENGINEERING</p>
-          <h1>Orbital Reliability Lab</h1>
-        </div>
+        <div><p class="eyebrow">HIGH-CONSEQUENCE SYSTEMS / RELIABILITY ENGINEERING</p><h1>Orbital Reliability Lab</h1></div>
       </div>
-      <div class="clock-block">
-        <span>LAB UPTIME · v0.2.0 SYSTEMS CORE</span>
-        <strong id="uptime">T+ 00:00:00</strong>
-      </div>
+      <div class="clock-block"><span>LAB UPTIME · v0.3.0 OPERATIONAL STATE MODELS</span><strong id="uptime">T+ 00:00:00</strong></div>
     </header>
 
     <section class="workspace-grid">
       <article class="panel">
-        <div class="panel-title">
-          <div><p class="eyebrow">SIMULATION ENVIRONMENT</p><h3>Operational Domain</h3></div>
-          <span class="armed">DUAL DOMAIN</span>
-        </div>
-        <p class="panel-copy">The same reliability core now runs two high-consequence simulation environments.</p>
+        <div class="panel-title"><div><p class="eyebrow">SIMULATION ENVIRONMENT</p><h3>Operational Domain</h3></div><span class="armed">DUAL DOMAIN</span></div>
+        <p class="panel-copy">One reliability core, two operational models, domain-specific dependencies and failure effects.</p>
         <div class="fault-grid">
-          <button data-environment="mission"><span>01</span><b>Mission Operations</b><small>Ground systems · telemetry · command · tracking</small></button>
-          <button data-environment="factory"><span>02</span><b>Factory Operations</b><small>Equipment · automation · production tracking · controls</small></button>
+          <button data-environment="mission"><span>01</span><b>Mission Operations</b><small>Ground systems · telemetry · command · redundancy</small></button>
+          <button data-environment="factory"><span>02</span><b>Factory Operations</b><small>Equipment · material flow · MES · process control</small></button>
         </div>
       </article>
-
       <article class="panel">
-        <div class="panel-title">
-          <div><p class="eyebrow">SCENARIO LIBRARY</p><h3>Domain Failure Scenarios</h3></div>
-          <span class="armed">RUNBOOK MODE</span>
-        </div>
-        <p class="panel-copy" id="scenarioDescription">Run domain-specific failures through the shared reliability loop.</p>
+        <div class="panel-title"><div><p class="eyebrow">SCENARIO LIBRARY</p><h3>Operational Failure Scenarios</h3></div><span class="armed">RUNBOOK MODE</span></div>
+        <p class="panel-copy" id="scenarioDescription">Run a failure through the shared response contract.</p>
         <div class="fault-grid" id="scenarioList"></div>
       </article>
     </section>
@@ -55,7 +43,7 @@
       </div>
       <div class="hero-stats">
         <div><span>ENVIRONMENT</span><strong id="environmentName">MISSION OPS</strong></div>
-        <div><span>INCIDENTS</span><strong id="incidentCount">0</strong></div>
+        <div><span>OPERATIONAL IMPACT</span><strong id="impactLevel">NONE</strong></div>
         <div><span>LAST MTTR</span><strong id="mttr">—</strong></div>
       </div>
     </section>
@@ -69,27 +57,28 @@
 
     <section class="workspace-grid">
       <article class="panel">
-        <div class="panel-title">
-          <div><p class="eyebrow">OPERATIONAL TOPOLOGY</p><h3 id="systemsTitle">Mission Operations Systems</h3></div>
-          <span class="live"><i></i> MONITORED</span>
-        </div>
+        <div class="panel-title"><div><p class="eyebrow">OPERATIONAL STATE MODEL</p><h3 id="systemsTitle">Mission Operations Systems</h3></div><span class="live"><i></i> STATEFUL</span></div>
         <p class="panel-copy" id="environmentDescription"></p>
-        <div id="systemsGrid" class="event-log"></div>
+        <div id="systemsGrid" class="systems-grid"></div>
       </article>
-
-      <article class="panel log-panel">
-        <div class="panel-title">
-          <div><p class="eyebrow">INCIDENT EVIDENCE</p><h3>Event Stream</h3></div>
-          <span class="live"><i></i> LIVE</span>
-        </div>
-        <div id="eventLog" class="event-log"></div>
+      <article class="panel impact-panel">
+        <div class="panel-title"><div><p class="eyebrow">DEPENDENCY / FLOW MODEL</p><h3>Operational Impact</h3></div><span class="armed" id="impactBadge">NONE</span></div>
+        <div class="impact-copy"><strong id="impactHeadline">Environment nominal</strong><p id="impactDetail"></p></div>
+        <p class="eyebrow">ACTIVE PATH / PROCESS FLOW</p>
+        <div id="activePath" class="path-flow"></div>
+        <p class="eyebrow affected-label">AFFECTED SYSTEMS</p>
+        <div id="affectedSystems" class="chip-row"><span class="system-chip muted-chip">NONE</span></div>
       </article>
     </section>
 
     <section class="workspace-grid">
+      <article class="panel log-panel">
+        <div class="panel-title"><div><p class="eyebrow">INCIDENT EVIDENCE</p><h3>Event Stream</h3></div><span class="live"><i></i> LIVE</span></div>
+        <div id="eventLog" class="event-log"></div>
+      </article>
       <article class="panel fault-panel">
         <div class="panel-title"><div><p class="eyebrow">SYSTEMS CORE</p><h3>Direct Fault Injection</h3></div><span class="armed">LAB MODE</span></div>
-        <p class="panel-copy">Generic failures remain available to exercise the shared engine independently of a domain scenario.</p>
+        <p class="panel-copy">Generic faults remain available to exercise the core independently of a domain scenario.</p>
         <div class="fault-grid">
           <button data-fault="latency"><span>01</span><b>Latency</b><small>860 ms response time</small></button>
           <button data-fault="packet_loss"><span>02</span><b>Packet Loss</b><small>18.4% communications loss</small></button>
@@ -102,24 +91,19 @@
           <button class="secondary" id="resetButton">Reset Environment</button>
         </div>
       </article>
-
-      <article class="panel">
-        <div class="panel-title"><div><p class="eyebrow">SYSTEMS CORE</p><h3>Shared Reliability Contract</h3></div><span class="armed">v0.2</span></div>
-        <p class="panel-copy">Factory and mission simulations now share one response lifecycle, one evidence model, and one API surface.</p>
-        <section class="flow-panel">
-          <div class="flow-node"><span>01</span><b>INJECT</b><small>Known failure</small></div><i></i>
-          <div class="flow-node"><span>02</span><b>DETECT</b><small>Threshold</small></div><i></i>
-          <div class="flow-node"><span>03</span><b>ISOLATE</b><small>Fault domain</small></div><i></i>
-          <div class="flow-node"><span>04</span><b>RECOVER</b><small>Action</small></div><i></i>
-          <div class="flow-node"><span>05</span><b>VALIDATE</b><small>Health</small></div>
-        </section>
-      </article>
     </section>
 
-    <footer>
-      <span>Independent engineering portfolio project · Not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries.</span>
-      <strong>Built by Alexander Taylor · Lordkoii</strong>
-    </footer>
+    <section class="flow-panel contract-flow">
+      <div class="flow-node"><span>01</span><b>INJECT</b><small>Known failure</small></div><i></i>
+      <div class="flow-node"><span>02</span><b>DETECT</b><small>Threshold</small></div><i></i>
+      <div class="flow-node"><span>03</span><b>DIAGNOSE</b><small>Dependencies</small></div><i></i>
+      <div class="flow-node"><span>04</span><b>ISOLATE</b><small>Fault domain</small></div><i></i>
+      <div class="flow-node"><span>05</span><b>RECOVER</b><small>Action</small></div><i></i>
+      <div class="flow-node"><span>06</span><b>VALIDATE</b><small>Health + flow</small></div><i></i>
+      <div class="flow-node"><span>07</span><b>EVIDENCE</b><small>MTTR + events</small></div>
+    </section>
+
+    <footer><span>Independent engineering portfolio project · Not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries.</span><strong>Built by Alexander Taylor · Lordkoii</strong></footer>
   </main>
   <script type="module" src="/app.js"></script>
 </body>

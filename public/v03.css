@@ -1,0 +1,22 @@
+.systems-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:18px; }
+.system-card { border:1px solid #273540; background:#0b1116; padding:13px; min-height:112px; display:flex; flex-direction:column; gap:7px; }
+.system-card[data-health="CRITICAL"] { border-color:#6a3035; background:rgba(58,18,22,.35); }
+.system-card[data-health="DEGRADED"], .system-card[data-health="WARNING"] { border-color:#69552d; background:rgba(53,41,17,.28); }
+.system-card[data-health="RECOVERING"] { border-color:#4c6472; }
+.system-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.system-top strong { font-family:"SFMono-Regular",Consolas,monospace; font-size:12px; }
+.system-state { font-family:"SFMono-Regular",Consolas,monospace; font-size:9px; letter-spacing:.08em; border:1px solid #32424e; padding:4px 6px; color:#9fb0bc; }
+.system-card[data-health="CRITICAL"] .system-state { color:#ff8a91; border-color:#6a3035; }
+.system-card[data-health="WARNING"] .system-state,.system-card[data-health="DEGRADED"] .system-state { color:#ffd17c; border-color:#69552d; }
+.system-card p { margin:0; color:#a4b3bd; font-size:10px; }
+.system-card small { color:#627583; line-height:1.4; }
+.advance-button { margin-top:auto; align-self:flex-start; border:1px solid #385060; background:#101920; color:#9fc4d4; font-size:8px; letter-spacing:.09em; padding:5px 8px; cursor:pointer; }
+.advance-button:hover { color:#fff; border-color:#5d8195; }
+.impact-copy { border-left:2px solid #334753; padding:10px 0 10px 14px; margin:20px 0 22px; }
+.impact-copy strong { font-size:15px; }.impact-copy p { margin:6px 0 0; color:#8295a3; font-size:11px; line-height:1.55; }
+.path-flow { display:flex; align-items:center; flex-wrap:wrap; gap:7px; min-height:34px; margin:10px 0 22px; }
+.path-node { border:1px solid #33434f; background:#0d141a; padding:7px 9px; font-family:"SFMono-Regular",Consolas,monospace; font-size:9px; }
+.path-arrow { color:#4c6979; font-family:monospace; }.affected-label { margin-top:8px; }
+.chip-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }.system-chip { border:1px solid #4b4141; color:#d5a7aa; background:#1a1112; padding:5px 7px; font-family:monospace; font-size:8px; }.muted-chip { border-color:#2b3740; color:#667985; background:#0c1115; }
+.contract-flow { margin-top:14px; }.impact-panel .armed[data-level="CRITICAL"] { color:var(--red); border-color:#6a3035; }.impact-panel .armed[data-level="DEGRADED"],.impact-panel .armed[data-level="RECOVERING"] { color:var(--amber); border-color:#69552d; }
+@media(max-width:700px){.systems-grid{grid-template-columns:1fr}.contract-flow{overflow:auto;justify-content:flex-start}.contract-flow>i{min-width:20px}}

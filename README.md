@@ -4,55 +4,65 @@
 
 > **Reliability should be tested before it becomes an incident.**
 
-**Orbital Reliability Lab (ORL)** is a systems reliability, automation, and operations engineering lab for simulated high-consequence environments.
+**Orbital Reliability Lab (ORL)** is a systems reliability, automation, validation, and operations engineering lab for simulated high-consequence environments.
 
-The project is evolving around two application domains that share the same reliability core:
+ORL currently models two operational domains on one shared reliability core:
 
-- **Mission Operations** — ground systems, telemetry, command, tracking, redundancy, and readiness
-- **Factory Operations** — equipment interfaces, automation, production tracking, process visibility, and validation
+- **Mission Operations** — ground systems, telemetry, command, tracking, redundancy, and failover
+- **Factory Operations** — equipment lifecycles, material flow, MES dependencies, production-state protection, and process visibility
 
 ORL is an independent engineering portfolio project. It is **not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries**, and it does not reproduce proprietary systems or processes.
 
-## v0.2 — Systems Core
+## v0.3 — Operational State Models
 
-v0.2 separates the reliability lifecycle from the simulated domain. Both environments now run through the same core:
+v0.3 makes the simulated assets stateful and dependency-aware.
+
+The shared response contract is now:
 
 `INJECT → DETECT → DIAGNOSE → ISOLATE → RECOVER → VALIDATE → EVIDENCE`
 
-### What it demonstrates
-
-- reusable reliability/fault-recovery engine
-- domain-aware scenario execution
-- environment and asset state modeling
-- controlled fault injection
-- threshold-based detection and fault-domain context
-- automated/manual recovery
-- post-recovery validation
-- MTTR and incident evidence
-- Prometheus-style metrics
-- Node and Playwright automation
-- GitHub Actions CI
-- Dockerized execution
-
-## Environments
-
 ### Mission Operations
 
-Current systems:
+Nominal telemetry path:
 
-`TEL-GW-01` · `CMD-01` · `TRACK-01` · `GS-A` · `GS-B` · `MDB-01`
+`GS-A (PRIMARY) → TEL-GW-01 → MDB-01`
 
-Current scenarios include ground-link degradation, telemetry gateway outage, and mission compute saturation.
+with `GS-B` held in `STANDBY`.
+
+A ground-link incident can now transition the system through:
+
+- GS-A: `PRIMARY → DEGRADED → FAULT → RECOVERING → PRIMARY`
+- GS-B: `STANDBY → FAILOVER → PRIMARY → STANDBY`
+- telemetry gateway: dependency-aware degraded/failover states
+- active path changes during recovery
 
 ### Factory Operations
 
-Current systems:
+Process equipment now implements a simplified lifecycle:
 
-`LITH-01` · `ETCH-01` · `DEP-01` · `MET-01` · `AMHS-01` · `MES-01`
+`IDLE → SETUP → RUNNING → COMPLETE → IDLE`
 
-Current scenarios include equipment-link loss, MES gateway outage, and control-node saturation.
+Shared-system failures produce operational consequences rather than only metric changes:
 
-These are intentionally simplified abstractions used to demonstrate software, reliability, testing, and operational engineering concepts.
+- **MES outage** → process equipment enters `HOLD`
+- **AMHS saturation** → process equipment becomes `STARVED`
+- **Metrology link loss** → simulated quality hold
+
+## What the project demonstrates
+
+- state-machine design
+- dependency-aware failure propagation
+- redundancy and failover modeling
+- controlled fault injection
+- threshold-based incident detection
+- automated/manual recovery
+- post-recovery validation
+- operational impact modeling
+- MTTR and incident evidence
+- Prometheus-style system and per-asset metrics
+- Node + Playwright test automation
+- GitHub Actions CI
+- Dockerized execution
 
 ## Run locally
 
@@ -76,20 +86,21 @@ npm run test:e2e
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `GET` | `/api/telemetry` | Current environment, system states, and metrics |
+| `GET` | `/api/telemetry` | Environment, asset states, health, active flow, impact, and metrics |
 | `GET` | `/api/environments` | Available simulation environments |
-| `POST` | `/api/environment` | Switch the active environment |
+| `POST` | `/api/environment` | Switch Mission / Factory Operations |
 | `GET` | `/api/scenarios` | Scenarios for the active environment |
 | `POST` | `/api/scenarios/run` | Run a domain-specific controlled failure |
-| `GET` | `/api/events` | Incident/recovery evidence stream |
-| `GET` | `/api/metrics` | Prometheus-style reliability metrics |
-| `GET` | `/api/health` | Health status suitable for probes |
+| `POST` | `/api/systems/advance` | Advance a factory equipment lifecycle |
+| `GET` | `/api/events` | Incident and recovery evidence stream |
+| `GET` | `/api/metrics` | Prometheus-style global and per-asset metrics |
+| `GET` | `/api/health` | Health endpoint for probes |
 | `POST` | `/api/faults` | Inject a generic infrastructure fault |
 | `POST` | `/api/recover` | Trigger manual recovery |
 | `POST` | `/api/auto-recovery` | Arm/disarm automatic recovery |
 | `POST` | `/api/reset` | Reset the active environment |
 
-Example scenario:
+Example:
 
 ```bash
 curl -X POST http://localhost:3000/api/scenarios/run \
@@ -103,34 +114,34 @@ curl -X POST http://localhost:3000/api/scenarios/run \
 flowchart LR
     Dashboard --> API
     Tests --> API
-    API --> SystemsCore
-    SystemsCore --> EnvironmentRegistry
-    SystemsCore --> ScenarioLibrary
-    EnvironmentRegistry --> MissionOps
-    EnvironmentRegistry --> FactoryOps
-    SystemsCore --> IncidentEvidence
-    SystemsCore --> PrometheusMetrics
+    API --> ReliabilityEngine
+    ReliabilityEngine --> OperationalModel
+    ReliabilityEngine --> ScenarioLibrary
+    OperationalModel --> MissionOps
+    OperationalModel --> FactoryOps
+    ReliabilityEngine --> Evidence
+    ReliabilityEngine --> Metrics
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the evolving [`docs/ROADMAP.md`](docs/ROADMAP.md).
+See:
 
-## Why this project exists
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/STATE-MODELS.md`](docs/STATE-MODELS.md)
+- [`docs/ROADMAP.md`](docs/ROADMAP.md)
 
-ORL is built to make practical engineering skills visible: QA and validation, incident response, platform/reliability thinking, APIs, infrastructure, observability, databases, and operational troubleshooting.
+## Direction
 
-The long-term goal is not to imitate a specific company. It is to explore a problem shared across demanding engineering organizations:
+The project is intentionally growing toward engineering concepts relevant to both advanced manufacturing systems and space/mission reliability work.
 
-**When software interacts with complex physical operations, can failures be detected quickly, isolated safely, recovered deliberately, and proven healthy with evidence?**
+Near-term tracks include:
 
-## Roadmap
-
-The project will expand in two directions while preserving a shared core:
-
-- Factory: equipment state models → MQTT/OPC-UA → mini-MES → SPC → FAT/SAT-style validation
-- Mission: ground systems → telemetry failover → readiness validation → distributed reliability scenarios
-- Shared: PostgreSQL → Grafana → richer metrics → scenario reports → container/Kubernetes reliability
-
-Full roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- factory lot / wafer / recipe and mini-MES simulation
+- richer mission network and telemetry routing
+- MQTT and OPC-UA equipment communications
+- PostgreSQL + Grafana observability
+- SPC / process-drift detection
+- factory FAT/SAT-style qualification
+- mission readiness validation
 
 ## Author
 
