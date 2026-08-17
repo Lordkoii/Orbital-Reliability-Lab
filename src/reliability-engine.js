@@ -1,27 +1,39 @@
+import { getEnvironment, listEnvironments } from './environments.js';
+import { getScenario, getScenarios } from './scenario-library.js';
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export class ReliabilityEngine {
-  constructor() {
+  constructor({ environment = 'mission' } = {}) {
     this.startedAt = Date.now();
     this.autoRecovery = true;
     this.incidentCounter = 0;
+    this.environmentId = getEnvironment(environment) ? environment : 'mission';
     this.reset();
   }
 
-  reset() {
-    this.metrics = {
+  baselineMetrics() {
+    return {
       latencyMs: 22,
       packetLossPct: 0.1,
       cpuPct: 31,
       throughputRps: 1260,
       availabilityPct: 99.99
     };
+  }
+
+  reset() {
+    if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
+    this.metrics = this.baselineMetrics();
     this.activeFault = null;
+    this.activeScenario = null;
     this.status = 'NOMINAL';
     this.detectedAt = null;
     this.lastMttrMs = null;
-    this.events = [this.event('SYSTEM', 'Telemetry service initialized', 'info')];
+    const environment = this.getEnvironment();
+    this.events = [this.event('SYSTEM', `${environment.name} initialized`, 'info')];
     this.recoveryTimer = null;
+    return this.getSnapshot();
   }
 
   event(source, message, severity = 'info') {
@@ -36,7 +48,41 @@ export class ReliabilityEngine {
 
   pushEvent(source, message, severity = 'info') {
     this.events.unshift(this.event(source, message, severity));
-    this.events = this.events.slice(0, 80);
+    this.events = this.events.slice(0, 100);
+  }
+
+  getEnvironment() {
+    return getEnvironment(this.environmentId);
+  }
+
+  listEnvironments() {
+    return listEnvironments();
+  }
+
+  getScenarios() {
+    return getScenarios(this.environmentId);
+  }
+
+  setEnvironment(id) {
+    const environment = getEnvironment(id);
+    if (!environment) return { ok: false, reason: 'Unknown environment', snapshot: this.getSnapshot() };
+    if (this.activeFault) return { ok: false, reason: 'Cannot switch environments during an active incident', snapshot: this.getSnapshot() };
+
+    this.environmentId = id;
+    this.reset();
+    this.pushEvent('ENV', `${environment.name} selected`, 'success');
+    return { ok: true, snapshot: this.getSnapshot() };
+  }
+
+  getSystemStates() {
+    const environment = this.getEnvironment();
+    return environment.assets.map((asset) => {
+      let state = 'NOMINAL';
+      if (this.activeFault?.target === asset.id) {
+        state = this.status === 'RECOVERING' ? 'RECOVERING' : 'DEGRADED';
+      }
+      return { ...asset, state };
+    });
   }
 
   getSnapshot() {
@@ -44,7 +90,11 @@ export class ReliabilityEngine {
     return {
       status: this.status,
       metrics: { ...this.metrics },
+      environment: this.getEnvironment(),
+      systems: this.getSystemStates(),
+      scenarios: this.getScenarios(),
       activeFault: this.activeFault,
+      activeScenario: this.activeScenario,
       autoRecovery: this.autoRecovery,
       uptimeSeconds: Math.floor((Date.now() - this.startedAt) / 1000),
       incidentCounter: this.incidentCounter,
@@ -69,7 +119,25 @@ export class ReliabilityEngine {
     return this.getSnapshot();
   }
 
-  injectFault(type) {
+  runScenario(id) {
+    const scenario = getScenario(id);
+    if (!scenario) return { ok: false, reason: 'Unknown scenario', snapshot: this.getSnapshot() };
+    if (scenario.environment !== this.environmentId) {
+      return { ok: false, reason: 'Scenario does not belong to the active environment', snapshot: this.getSnapshot() };
+    }
+    if (this.activeFault) return { ok: false, reason: 'An incident is already active', snapshot: this.getSnapshot() };
+
+    this.activeScenario = { id: scenario.id, name: scenario.name, target: scenario.target };
+    this.pushEvent('SCENARIO', `${scenario.name} started against ${scenario.target}`, 'warning');
+    return this.injectFault(scenario.faultType, {
+      label: scenario.name,
+      target: scenario.target,
+      scenarioId: scenario.id,
+      summary: scenario.summary
+    });
+  }
+
+  injectFault(type, context = {}) {
     if (this.activeFault) {
       return { ok: false, reason: 'An incident is already active', snapshot: this.getSnapshot() };
     }
@@ -92,7 +160,7 @@ export class ReliabilityEngine {
         }
       },
       service_down: {
-        label: 'Telemetry API outage',
+        label: 'Service outage',
         mutate: () => {
           this.metrics.availabilityPct = 0;
           this.metrics.throughputRps = 0;
@@ -115,13 +183,17 @@ export class ReliabilityEngine {
     this.incidentCounter += 1;
     this.activeFault = {
       type,
-      label: fault.label,
+      label: context.label || fault.label,
+      target: context.target || null,
+      scenarioId: context.scenarioId || null,
+      summary: context.summary || null,
       incidentId: `IR-${String(this.incidentCounter).padStart(3, '0')}`,
       injectedAt: new Date().toISOString()
     };
     fault.mutate();
     this.status = 'DEGRADED';
-    this.pushEvent('FAULT', `${this.activeFault.incidentId}: ${fault.label} injected`, 'warning');
+    const target = this.activeFault.target ? ` on ${this.activeFault.target}` : '';
+    this.pushEvent('FAULT', `${this.activeFault.incidentId}: ${this.activeFault.label}${target} injected`, 'warning');
 
     setTimeout(() => this.detectActiveFault(), 700);
     return { ok: true, snapshot: this.getSnapshot() };
@@ -131,7 +203,8 @@ export class ReliabilityEngine {
     if (!this.activeFault) return;
     this.status = 'INCIDENT';
     this.detectedAt = Date.now();
-    this.pushEvent('DETECT', `${this.activeFault.incidentId}: Threshold breach confirmed`, 'critical');
+    const target = this.activeFault.target ? ` (${this.activeFault.target})` : '';
+    this.pushEvent('DETECT', `${this.activeFault.incidentId}: Threshold breach confirmed${target}`, 'critical');
     this.pushEvent('ISOLATE', `${this.activeFault.incidentId}: Fault domain isolated`, 'warning');
 
     if (this.autoRecovery) {
@@ -149,15 +222,10 @@ export class ReliabilityEngine {
     this.pushEvent('VALIDATE', `${incidentId}: Running post-recovery health checks`, 'info');
 
     setTimeout(() => {
-      this.metrics = {
-        latencyMs: 24,
-        packetLossPct: 0.1,
-        cpuPct: 34,
-        throughputRps: 1290,
-        availabilityPct: 99.99
-      };
+      this.metrics = this.baselineMetrics();
       this.lastMttrMs = this.detectedAt ? Date.now() - this.detectedAt : null;
       this.activeFault = null;
+      this.activeScenario = null;
       this.detectedAt = null;
       this.status = 'NOMINAL';
       this.pushEvent('SYSTEM', `${incidentId}: Recovery validated — system nominal (${mode})`, 'success');
