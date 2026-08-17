@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orbital Reliability Lab</title>
+  <meta name="description" content="Fault injection, detection, recovery validation, and incident evidence in a mission-control-inspired reliability lab." />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="stars"></div>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div>
+          <p class="eyebrow">ORBITAL SYSTEMS / RELIABILITY ENGINEERING</p>
+          <h1>Orbital Reliability Lab</h1>
+        </div>
+      </div>
+      <div class="clock-block">
+        <span>MISSION ELAPSED</span>
+        <strong id="uptime">T+ 00:00:00</strong>
+      </div>
+    </header>
+
+    <section class="status-hero" id="statusHero">
+      <div>
+        <p class="eyebrow">SYSTEM STATE</p>
+        <div class="state-row"><span class="pulse-dot"></span><h2 id="systemStatus">NOMINAL</h2></div>
+        <p id="statusSubtext">All telemetry channels operating within expected thresholds.</p>
+      </div>
+      <div class="hero-stats">
+        <div><span>INCIDENTS</span><strong id="incidentCount">0</strong></div>
+        <div><span>LAST MTTR</span><strong id="mttr">—</strong></div>
+        <div><span>AUTO RECOVERY</span><strong id="autoState">ARMED</strong></div>
+      </div>
+    </section>
+
+    <section class="metric-grid">
+      <article class="metric-card">
+        <div class="metric-head"><span>LATENCY</span><small>TELEMETRY API</small></div>
+        <strong><span id="latency">22</span><em>ms</em></strong>
+        <div class="meter"><i id="latencyBar"></i></div>
+        <p>Target &lt; 100 ms</p>
+      </article>
+      <article class="metric-card">
+        <div class="metric-head"><span>PACKET LOSS</span><small>UPLINK</small></div>
+        <strong><span id="packetLoss">0.1</span><em>%</em></strong>
+        <div class="meter"><i id="packetBar"></i></div>
+        <p>Target &lt; 1.0%</p>
+      </article>
+      <article class="metric-card">
+        <div class="metric-head"><span>COMPUTE</span><small>CPU UTILIZATION</small></div>
+        <strong><span id="cpu">31</span><em>%</em></strong>
+        <div class="meter"><i id="cpuBar"></i></div>
+        <p>Target &lt; 85%</p>
+      </article>
+      <article class="metric-card">
+        <div class="metric-head"><span>THROUGHPUT</span><small>EVENT STREAM</small></div>
+        <strong><span id="throughput">1,260</span><em>rps</em></strong>
+        <div class="meter"><i id="throughputBar"></i></div>
+        <p>Nominal 1.1k–1.45k rps</p>
+      </article>
+    </section>
+
+    <section class="workspace-grid">
+      <article class="panel fault-panel">
+        <div class="panel-title">
+          <div><p class="eyebrow">CHAOS CONTROLS</p><h3>Fault Injection</h3></div>
+          <span class="armed">LAB MODE</span>
+        </div>
+        <p class="panel-copy">Inject controlled failures, verify detection, isolate the fault domain, and validate recovery.</p>
+        <div class="fault-grid">
+          <button data-fault="latency"><span>01</span><b>Latency</b><small>860 ms response time</small></button>
+          <button data-fault="packet_loss"><span>02</span><b>Packet Loss</b><small>18.4% uplink loss</small></button>
+          <button data-fault="cpu_spike"><span>03</span><b>Compute Spike</b><small>98.7% CPU saturation</small></button>
+          <button data-fault="service_down"><span>04</span><b>Service Down</b><small>Telemetry API unavailable</small></button>
+        </div>
+        <div class="control-row">
+          <label class="toggle"><input id="autoRecovery" type="checkbox" checked><span></span> Automatic recovery</label>
+          <button class="secondary" id="recoverButton">Manual Recover</button>
+          <button class="secondary" id="resetButton">Reset Lab</button>
+        </div>
+      </article>
+
+      <article class="panel log-panel">
+        <div class="panel-title">
+          <div><p class="eyebrow">INCIDENT EVIDENCE</p><h3>Event Stream</h3></div>
+          <span class="live"><i></i> LIVE</span>
+        </div>
+        <div id="eventLog" class="event-log"></div>
+      </article>
+    </section>
+
+    <section class="flow-panel">
+      <div class="flow-node"><span>01</span><b>INJECT</b><small>Controlled failure</small></div>
+      <i></i>
+      <div class="flow-node"><span>02</span><b>DETECT</b><small>Threshold breach</small></div>
+      <i></i>
+      <div class="flow-node"><span>03</span><b>ISOLATE</b><small>Fault domain</small></div>
+      <i></i>
+      <div class="flow-node"><span>04</span><b>RECOVER</b><small>Automated action</small></div>
+      <i></i>
+      <div class="flow-node"><span>05</span><b>VALIDATE</b><small>Health checks</small></div>
+      <i></i>
+      <div class="flow-node"><span>06</span><b>EVIDENCE</b><small>MTTR + RCA data</small></div>
+    </section>
+
+    <footer>
+      <span>Independent engineering portfolio project · Not affiliated with SpaceX, Tesla, or their subsidiaries.</span>
+      <strong>Built by Alexander Taylor · Lordkoii</strong>
+    </footer>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

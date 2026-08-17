@@ -1,0 +1,22 @@
+{
+  "name": "orbital-reliability-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A mission-control-inspired reliability lab for fault injection, detection, recovery validation, and incident evidence.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test tests/engine.test.js",
+    "smoke": "node scripts/smoke-test.mjs",
+    "test:e2e": "playwright test",
+    "test:api": "playwright test tests/api.spec.js",
+    "test:ui": "playwright test tests/dashboard.spec.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}
