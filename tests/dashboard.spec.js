@@ -3,13 +3,14 @@ import { test, expect } from '@playwright/test';
 test.beforeEach(async ({ page, request }) => {
   await request.post('/api/environment', { data: { id: 'mission' } });
   await request.post('/api/reset');
+  await request.post('/api/auto-recovery', { data: { enabled: true } });
   await page.goto('/');
 });
 
 test('dashboard exposes operational state and dependency model', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Orbital Reliability Lab' })).toBeVisible();
-  await expect(page.getByText('OPERATIONAL STATE MODEL')).toBeVisible();
-  await expect(page.getByText('DEPENDENCY / FLOW MODEL')).toBeVisible();
+  await expect(page.getByText('OPERATIONAL STATE MODEL', { exact: true })).toBeVisible();
+  await expect(page.getByText('DEPENDENCY / FLOW MODEL', { exact: true })).toBeVisible();
   await expect(page.getByText('GS-A').first()).toBeVisible();
   await expect(page.getByText('PRIMARY').first()).toBeVisible();
 });

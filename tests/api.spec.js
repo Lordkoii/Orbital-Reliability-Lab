@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test.beforeEach(async ({ request }) => {
   await request.post('/api/environment', { data: { id: 'mission' } });
   await request.post('/api/reset');
+  await request.post('/api/auto-recovery', { data: { enabled: true } });
 });
 
 test('mission topology exposes primary and standby ground paths', async ({ request }) => {
