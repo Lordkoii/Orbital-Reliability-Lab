@@ -329,7 +329,7 @@ export class MissionNetworkModel {
       {
         id: 'continuity',
         label: 'Telemetry continuity ≥ 99%',
-        status: latestContinuity >= 99 ? 'PASS' : latestContinuity >= 95 ? 'WARN' : 'FAIL',
+        status: latestContinuity >= 99 ? 'PASS' : latestContinuity >= 80 ? 'WARN' : 'FAIL',
         detail: `${latestContinuity.toFixed(2)}% in latest frame window`
       }
     ];
