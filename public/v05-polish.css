@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&display=swap");
+
 /* v0.5 operator readability and demo polish
    Loaded after the historical v0.5 styles so the presentation layer can evolve
    without rewriting the earlier release stylesheets. */
@@ -5,6 +7,27 @@
 :root {
   --muted-readable: #93a5b3;
   --muted-soft: #7f93a2;
+  --font-display-tech: "Syncopate", "Arial Narrow", "Segoe UI", sans-serif;
+}
+
+/* Terafab-inspired display treatment v2.
+   Syncopate gives the product/section identity a lighter, wider, more aerospace-
+   industrial profile while preserving monospace for evidence and UI sans for copy. */
+.brand h1 {
+  font-family: var(--font-display-tech);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: .105em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.panel-title h3 {
+  font-family: var(--font-display-tech);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: .055em;
+  line-height: 1.45;
 }
 
 .eyebrow {
@@ -23,7 +46,6 @@
 .metric-card em { font-size: 12px; }
 .metric-card p { font-size: 11px; color: #788c9b; }
 
-.panel-title h3 { font-size: 19px; }
 .armed, .live { font-size: 10px; padding: 7px 9px; }
 .panel-copy {
   color: var(--muted-readable);
