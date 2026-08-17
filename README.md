@@ -4,27 +4,55 @@
 
 > **Reliability should be tested before it becomes an incident.**
 
-A mission-control-inspired engineering lab that demonstrates controlled fault injection, threshold-based detection, fault-domain isolation, automated recovery, validation, and incident evidence capture.
+**Orbital Reliability Lab (ORL)** is a systems reliability, automation, and operations engineering lab for simulated high-consequence environments.
 
-This is an independent portfolio project built to demonstrate practical QA, reliability, automation, incident-response, and platform-engineering thinking. It is **not affiliated with SpaceX, Tesla, Starlink, or any of their subsidiaries**.
+The project is evolving around two application domains that share the same reliability core:
 
-## What it demonstrates
+- **Mission Operations** — ground systems, telemetry, command, tracking, redundancy, and readiness
+- **Factory Operations** — equipment interfaces, automation, production tracking, process visibility, and validation
 
-- Controlled fault injection: latency, packet loss, CPU saturation, and service outage
-- Detection of degraded system behavior
-- Automated or manual recovery paths
-- Post-recovery health validation
-- MTTR measurement and incident event evidence
-- API and UI automation using Playwright
-- CI validation through GitHub Actions
-- Containerized execution with Docker
-- A compact mission-control-style observability dashboard
+ORL is an independent engineering portfolio project. It is **not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries**, and it does not reproduce proprietary systems or processes.
 
-## Reliability loop
+## v0.2 — Systems Core
 
-`INJECT → DETECT → ISOLATE → RECOVER → VALIDATE → EVIDENCE`
+v0.2 separates the reliability lifecycle from the simulated domain. Both environments now run through the same core:
 
-The point is not the simulated spacecraft context. The point is the engineering loop: create a known failure, detect it, recover it, prove recovery, and preserve enough evidence to learn from the incident.
+`INJECT → DETECT → DIAGNOSE → ISOLATE → RECOVER → VALIDATE → EVIDENCE`
+
+### What it demonstrates
+
+- reusable reliability/fault-recovery engine
+- domain-aware scenario execution
+- environment and asset state modeling
+- controlled fault injection
+- threshold-based detection and fault-domain context
+- automated/manual recovery
+- post-recovery validation
+- MTTR and incident evidence
+- Prometheus-style metrics
+- Node and Playwright automation
+- GitHub Actions CI
+- Dockerized execution
+
+## Environments
+
+### Mission Operations
+
+Current systems:
+
+`TEL-GW-01` · `CMD-01` · `TRACK-01` · `GS-A` · `GS-B` · `MDB-01`
+
+Current scenarios include ground-link degradation, telemetry gateway outage, and mission compute saturation.
+
+### Factory Operations
+
+Current systems:
+
+`LITH-01` · `ETCH-01` · `DEP-01` · `MET-01` · `AMHS-01` · `MES-01`
+
+Current scenarios include equipment-link loss, MES gateway outage, and control-node saturation.
+
+These are intentionally simplified abstractions used to demonstrate software, reliability, testing, and operational engineering concepts.
 
 ## Run locally
 
@@ -34,45 +62,39 @@ npm start
 
 Open `http://localhost:3000`.
 
-## Run the automated tests
+## Tests
 
 ```bash
 npm test
 
-# Optional browser/API end-to-end suite
 npm install
 npx playwright install chromium
 npm run test:e2e
-```
-
-The suite validates nominal telemetry, incident detection, automated recovery, manual recovery, and UI state transitions.
-
-## Run with Docker
-
-```bash
-docker build -t orbital-reliability-lab .
-docker run --rm -p 3000:3000 orbital-reliability-lab
 ```
 
 ## API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `GET` | `/api/telemetry` | Current system state and metrics |
-| `GET` | `/api/events` | Incident/recovery event stream |
+| `GET` | `/api/telemetry` | Current environment, system states, and metrics |
+| `GET` | `/api/environments` | Available simulation environments |
+| `POST` | `/api/environment` | Switch the active environment |
+| `GET` | `/api/scenarios` | Scenarios for the active environment |
+| `POST` | `/api/scenarios/run` | Run a domain-specific controlled failure |
+| `GET` | `/api/events` | Incident/recovery evidence stream |
 | `GET` | `/api/metrics` | Prometheus-style reliability metrics |
 | `GET` | `/api/health` | Health status suitable for probes |
-| `POST` | `/api/faults` | Inject a controlled fault |
+| `POST` | `/api/faults` | Inject a generic infrastructure fault |
 | `POST` | `/api/recover` | Trigger manual recovery |
 | `POST` | `/api/auto-recovery` | Arm/disarm automatic recovery |
-| `POST` | `/api/reset` | Return the lab to its baseline state |
+| `POST` | `/api/reset` | Reset the active environment |
 
-Example:
+Example scenario:
 
 ```bash
-curl -X POST http://localhost:3000/api/faults \
+curl -X POST http://localhost:3000/api/scenarios/run \
   -H "Content-Type: application/json" \
-  -d '{"type":"packet_loss"}'
+  -d '{"id":"mission-ground-link-degradation"}'
 ```
 
 ## Architecture
@@ -80,49 +102,35 @@ curl -X POST http://localhost:3000/api/faults \
 ```mermaid
 flowchart LR
     Dashboard --> API
-    Playwright --> API
-    API --> ReliabilityEngine
-    ReliabilityEngine --> FaultInjection
-    ReliabilityEngine --> RecoveryValidation
-    ReliabilityEngine --> IncidentEvidence
-    API --> PrometheusMetrics
+    Tests --> API
+    API --> SystemsCore
+    SystemsCore --> EnvironmentRegistry
+    SystemsCore --> ScenarioLibrary
+    EnvironmentRegistry --> MissionOps
+    EnvironmentRegistry --> FactoryOps
+    SystemsCore --> IncidentEvidence
+    SystemsCore --> PrometheusMetrics
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design and [`docs/INCIDENT-WALKTHROUGH.md`](docs/INCIDENT-WALKTHROUGH.md) for a complete failure/recovery example.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the evolving [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Quick end-to-end smoke test
+## Why this project exists
 
-Start the app in one terminal:
+ORL is built to make practical engineering skills visible: QA and validation, incident response, platform/reliability thinking, APIs, infrastructure, observability, databases, and operational troubleshooting.
 
-```bash
-npm start
-```
+The long-term goal is not to imitate a specific company. It is to explore a problem shared across demanding engineering organizations:
 
-Then run:
+**When software interacts with complex physical operations, can failures be detected quickly, isolated safely, recovered deliberately, and proven healthy with evidence?**
 
-```bash
-npm run smoke
-```
+## Roadmap
 
-The smoke test resets the lab, injects packet loss, confirms incident detection, waits for automatic recovery, validates the final state, and checks that the evidence trail contains every response stage.
+The project will expand in two directions while preserving a shared core:
 
-## Why I built this
+- Factory: equipment state models → MQTT/OPC-UA → mini-MES → SPC → FAT/SAT-style validation
+- Mission: ground systems → telemetry failover → readiness validation → distributed reliability scenarios
+- Shared: PostgreSQL → Grafana → richer metrics → scenario reports → container/Kubernetes reliability
 
-My background spans production support, QA/validation, cloud infrastructure, incident response, databases, API testing, and operational troubleshooting. I wanted a small project that makes those skills visible rather than listing them as résumé bullets.
-
-The lab intentionally focuses on a simple question:
-
-**When a system fails, can we detect it quickly, recover it safely, and prove that it is healthy again?**
-
-## Next iterations
-
-- Historical incident storage
-- SLO/error-budget view
-- Container-level chaos scenarios
-- Kubernetes deployment and health probes
-- Network fault profiles
-- Automated incident report export
-- CI fault-injection scenario matrix
+Full roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 
 ## Author
 
