@@ -8,53 +8,57 @@ ORL targets engineering concepts shared by high-consequence manufacturing and sp
 - [x] Environment registry
 - [x] Mission Operations environment
 - [x] Factory Operations environment
-- [x] Domain-specific asset models
-- [x] Scenario library
-- [x] Environment/scenario API
+- [x] Scenario library and environment API
 - [x] Dual-environment dashboard
-- [x] Scenario and switching tests
 
-## v0.3 — Factory Operations
+## v0.3 — Operational State Models
 
-- equipment state machines
+- [x] Mission primary / standby ground paths
+- [x] Dependency-aware mission failures
+- [x] Ground-station failover state transitions
+- [x] Factory equipment lifecycle state machine
+- [x] Factory HOLD / STARVED / quality-impact behavior
+- [x] Operational impact model and affected-system tracking
+- [x] Per-asset Prometheus health metrics
+- [x] Lifecycle controls and dependency-flow dashboard
+
+## v0.4 — Factory Production Model
+
 - lot / wafer / recipe simulation
+- process-route tracking across LITH / ETCH / DEP / MET
+- production WIP and completion states
 - equipment alarms and maintenance states
-- production tracking / mini-MES model
+- mini-MES event model
 
-## v0.4 — Industrial Communications
+## v0.5 — Mission Network Model
 
-- MQTT broker + equipment telemetry topics
+- richer primary / secondary telemetry routing
+- command and tracking dependency graph
+- ground-link failover timing and continuity metrics
+- network partition and service dependency scenarios
+- mission readiness state
+
+## v0.6 — Industrial Communications
+
+- MQTT broker and equipment telemetry topics
 - OPC-UA simulation and adapter
-- equipment communication health monitoring
-- protocol fault scenarios
+- communications health monitoring
+- protocol fault and reconnect scenarios
 
-## v0.5 — Mission Operations
-
-- ground station state models
-- primary/secondary telemetry routes
-- command and tracking service dependencies
-- ground-link failover scenarios
-
-## v0.6 — Observability Platform
+## v0.7 — Observability Platform
 
 - PostgreSQL event and telemetry history
-- Prometheus metrics expansion
+- expanded Prometheus metrics
 - Grafana dashboards
 - SLO / availability views
+- incident history and trend analysis
 
-## v0.7 — Manufacturing Intelligence
+## v0.8 — Manufacturing Intelligence
 
 - process drift simulation
-- SPC/control-limit detection
+- SPC / control-limit detection
 - yield and quality metrics
 - automated lot hold / release workflow
-
-## v0.8 — Mission Reliability
-
-- readiness checks
-- network partitions and failover
-- telemetry continuity validation
-- degraded-mode mission scenarios
 
 ## v0.9 — Automated Qualification
 

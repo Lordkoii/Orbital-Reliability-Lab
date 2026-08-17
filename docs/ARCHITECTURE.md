@@ -1,82 +1,76 @@
-# Architecture — v0.2 Systems Core
+# Architecture — v0.3 Operational State Models
 
-Orbital Reliability Lab is evolving into a shared reliability platform with multiple operational environments. The project deliberately separates the **reliability lifecycle** from the domain being simulated.
+Orbital Reliability Lab separates a shared reliability lifecycle from the operational domain being simulated.
 
-## Core principle
+## Shared response contract
 
 `INJECT → DETECT → DIAGNOSE → ISOLATE → RECOVER → VALIDATE → EVIDENCE`
-
-The same lifecycle should work whether the simulated target is a factory equipment interface or a mission ground service.
 
 ```mermaid
 flowchart TB
     UI[Operations Dashboard] --> API[HTTP API]
-    API --> CORE[Systems Core / Reliability Engine]
+    TESTS[Node + Playwright Tests] --> API
+    API --> CORE[Reliability Engine]
     CORE --> ENV[Environment Registry]
     CORE --> SCENARIOS[Scenario Library]
-    ENV --> FACTORY[Factory Operations]
-    ENV --> MISSION[Mission Operations]
-    SCENARIOS --> FACTORY
-    SCENARIOS --> MISSION
+    CORE --> MODEL[Operational Model]
+    MODEL --> MISSION[Mission State + Dependency Model]
+    MODEL --> FACTORY[Factory State + Flow Model]
     CORE --> EVENTS[Incident Evidence]
     CORE --> METRICS[Prometheus-style Metrics]
-    TESTS[Node + Playwright Tests] --> API
 ```
 
-## Systems Core
+## Reliability Engine
 
-`ReliabilityEngine` owns shared behavior:
+`src/reliability-engine.js` owns the cross-domain incident lifecycle:
 
-- system state transitions
-- controlled fault injection
-- threshold-based detection
-- target/fault-domain context
-- automated and manual recovery
-- post-recovery validation
-- MTTR capture
-- incident evidence
 - environment switching
 - scenario execution
+- controlled fault injection
+- detection and diagnosis timing
+- isolation
+- automatic/manual recovery
+- post-recovery validation
+- MTTR capture
+- event evidence
 
-## Environment registry
+It delegates asset-level operational behavior to `OperationalModel`.
 
-`src/environments.js` defines domain metadata and assets.
+## Operational Model
 
-### Mission Operations
+`src/operational-model.js` owns per-asset state and dependency effects.
 
-Current simulated assets include:
+It tracks:
 
-- Telemetry Gateway
-- Command Service
-- Tracking Service
-- Ground Station A / B
-- Mission Database
+- operational state
+- health
+- operator-facing notes
+- active mission path / factory process flow
+- operational impact severity
+- affected assets
 
-### Factory Operations
+### Mission behavior
 
-Current simulated assets include:
+The mission model includes primary/standby ground stations and service dependencies. A GS-A incident can transition GS-B into failover and temporarily change the active telemetry path.
 
-- Lithography Tool
-- Etch Tool
-- Deposition Tool
-- Metrology Tool
-- Automated Material Handling
-- MES Gateway
+### Factory behavior
 
-These are intentionally simplified systems models, not replicas of proprietary hardware or processes.
+Factory process tools implement a simplified equipment lifecycle and react to shared-system failures. MES loss can hold process tools, while material-handling failure can starve them.
 
-## Scenario library
+## API additions in v0.3
 
-`src/scenario-library.js` maps operational scenarios to the shared core. Each scenario declares:
+`POST /api/systems/advance` advances a factory equipment lifecycle state.
 
-- environment
-- failure type
-- target asset
-- scenario summary
-- expected reliability response
+`GET /api/telemetry` now includes:
 
-Future versions can extend this contract with prerequisites, acceptance criteria, runbook actions, event timelines, and exported evidence.
+- `systems[].state`
+- `systems[].health`
+- `systems[].note`
+- `operationalImpact`
+- `activePath`
 
-## Next architectural layers
+`GET /api/metrics` includes per-asset health and a count of non-nominal assets.
 
-Planned additions include MQTT/OPC-UA adapters, PostgreSQL event history, Grafana dashboards, factory lot/recipe models, ground-link failover, readiness/acceptance test suites, and container/Kubernetes deployment targets.
+## Design intent
+
+The models are intentionally abstract. ORL is an engineering portfolio and learning environment, not a replica of proprietary mission or semiconductor manufacturing systems.

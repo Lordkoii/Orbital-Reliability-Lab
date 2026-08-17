@@ -1,8 +1,8 @@
 {
   "name": "orbital-reliability-lab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "A systems reliability, automation, and operations engineering lab for high-consequence factory and mission environments.",
+  "description": "A dual-domain reliability and operations engineering lab with dependency-aware mission and factory state models.",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
