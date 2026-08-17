@@ -3,6 +3,19 @@ await import('/app.js');
 const $ = (id) => document.getElementById(id);
 const contractNodes = [...document.querySelectorAll('.contract-flow .flow-node')];
 
+const finalPolishStyle = document.createElement('style');
+finalPolishStyle.textContent = `
+  .fault-grid button:disabled { opacity: .58 !important; }
+  .event time, .event b { font-size: 12px; }
+  .contract-flow .flow-node small { font-size: 11px; }
+  #affectedSystems .system-chip[data-role="FAILOVER"] {
+    border-color: #725c2d;
+    background: rgba(64, 49, 18, .28);
+    color: var(--amber);
+  }
+`;
+document.head.append(finalPolishStyle);
+
 let latestSnapshot = null;
 let trackedIncidentId = null;
 let missionIncidentLow = null;
@@ -123,6 +136,25 @@ function renderImpact(snapshot) {
   if (badge) badge.dataset.level = impact.level;
 }
 
+function renderAffectedRoles(snapshot) {
+  const chips = [...document.querySelectorAll('#affectedSystems .system-chip')];
+  const failoverTo = snapshot.missionNetwork?.failover?.state === 'ACTIVE'
+    ? snapshot.missionNetwork.failover.to
+    : null;
+  chips.forEach((chip) => {
+    if (failoverTo && chip.textContent.trim() === failoverTo) chip.dataset.role = 'FAILOVER';
+    else delete chip.dataset.role;
+  });
+}
+
+function renderRecoveryLabel(snapshot) {
+  const mttr = $('mttr');
+  const label = mttr?.parentElement?.querySelector('span');
+  if (!label) return;
+  const desired = snapshot.activeFault ? 'PREVIOUS RECOVERY' : 'LAST RECOVERY';
+  if (label.textContent !== desired) label.textContent = desired;
+}
+
 function renderFailoverLabel(snapshot) {
   const label = $('failoverEvidenceLabel');
   if (!label || !snapshot.missionNetwork) return;
@@ -158,6 +190,7 @@ function applyPresentation(snapshot) {
   if (!snapshot) return;
   latestSnapshot = snapshot;
   renderContract(snapshot);
+  renderRecoveryLabel(snapshot);
 
   if (snapshot.environment.id !== 'mission' || !snapshot.missionNetwork) return;
 
@@ -165,6 +198,7 @@ function applyPresentation(snapshot) {
   renderReadiness(snapshot);
   renderRoute(snapshot);
   renderImpact(snapshot);
+  renderAffectedRoles(snapshot);
   renderFailoverLabel(snapshot);
 }
 
@@ -184,6 +218,7 @@ const observed = [
   $('impactLevel'),
   $('impactHeadline'),
   $('impactDetail'),
+  $('affectedSystems'),
   $('failoverState')
 ].filter(Boolean);
 
