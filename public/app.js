@@ -14,7 +14,7 @@ function setMeter(el, width, danger) { el.style.width = width; el.style.backgrou
 function renderSystems(snapshot) {
   $('systemsGrid').innerHTML = snapshot.systems.map((system) => {
     const canAdvance = snapshot.environment.id === 'factory' && system.type === 'equipment' && system.health === 'NOMINAL' && !snapshot.activeFault;
-    return `<article class="system-card" data-health="${system.health}">
+    return `<article class="system-card" data-system-id="${system.id}" data-health="${system.health}">
       <div class="system-top"><strong>${system.id}</strong><span class="system-state">${system.state}</span></div>
       <p>${system.name} · ${system.health}</p><small>${system.note || system.type}</small>
       ${canAdvance ? `<button class="advance-button" data-advance="${system.id}">ADVANCE LIFECYCLE</button>` : ''}
