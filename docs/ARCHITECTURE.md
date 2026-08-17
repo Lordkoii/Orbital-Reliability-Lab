@@ -1,50 +1,82 @@
-# Architecture
+# Architecture — v0.2 Systems Core
 
-Orbital Reliability Lab is deliberately small enough to inspect quickly. The point is to show the reliability loop clearly rather than hide it behind a large framework.
+Orbital Reliability Lab is evolving into a shared reliability platform with multiple operational environments. The project deliberately separates the **reliability lifecycle** from the domain being simulated.
+
+## Core principle
+
+`INJECT → DETECT → DIAGNOSE → ISOLATE → RECOVER → VALIDATE → EVIDENCE`
+
+The same lifecycle should work whether the simulated target is a factory equipment interface or a mission ground service.
 
 ```mermaid
-flowchart LR
-    UI[Mission Control Dashboard] -->|poll| API[Node HTTP API]
-    TESTS[Playwright API + UI Tests] --> API
-    SMOKE[Zero-dependency Smoke Test] --> API
-    API --> ENGINE[Reliability Engine]
-    ENGINE --> METRICS[Telemetry State]
-    ENGINE --> EVENTS[Incident Evidence Stream]
-    ENGINE --> RECOVERY[Recovery + Validation]
-    API --> PROM[Prometheus-style /api/metrics]
-    CI[GitHub Actions] --> TESTS
-    CI --> SMOKE
+flowchart TB
+    UI[Operations Dashboard] --> API[HTTP API]
+    API --> CORE[Systems Core / Reliability Engine]
+    CORE --> ENV[Environment Registry]
+    CORE --> SCENARIOS[Scenario Library]
+    ENV --> FACTORY[Factory Operations]
+    ENV --> MISSION[Mission Operations]
+    SCENARIOS --> FACTORY
+    SCENARIOS --> MISSION
+    CORE --> EVENTS[Incident Evidence]
+    CORE --> METRICS[Prometheus-style Metrics]
+    TESTS[Node + Playwright Tests] --> API
 ```
 
-## Components
+## Systems Core
 
-### Reliability engine
+`ReliabilityEngine` owns shared behavior:
 
-A deterministic state machine around four system states:
+- system state transitions
+- controlled fault injection
+- threshold-based detection
+- target/fault-domain context
+- automated and manual recovery
+- post-recovery validation
+- MTTR capture
+- incident evidence
+- environment switching
+- scenario execution
 
-`NOMINAL → DEGRADED → INCIDENT → RECOVERING → NOMINAL`
+## Environment registry
 
-It owns controlled fault injection, threshold-confirmation timing, automatic recovery, post-recovery validation, MTTR calculation, and the incident event stream.
+`src/environments.js` defines domain metadata and assets.
 
-### HTTP API
+### Mission Operations
 
-Implemented with the Node.js standard library so the runtime itself has no external package dependencies. It exposes telemetry, health, fault injection, recovery controls, incident evidence, and Prometheus-style metrics.
+Current simulated assets include:
 
-### Dashboard
+- Telemetry Gateway
+- Command Service
+- Tracking Service
+- Ground Station A / B
+- Mission Database
 
-A dependency-free browser UI that polls the API and presents the current system state, telemetry metrics, incident count, last MTTR, chaos controls, and live incident evidence.
+### Factory Operations
 
-### Test layers
+Current simulated assets include:
 
-1. **Node unit tests** validate engine behavior with no package installation required.
-2. **Smoke test** exercises a real running process end-to-end using Node's built-in `fetch`.
-3. **Playwright** validates both API behavior and browser state transitions in CI.
+- Lithography Tool
+- Etch Tool
+- Deposition Tool
+- Metrology Tool
+- Automated Material Handling
+- MES Gateway
 
-## Reliability design choices
+These are intentionally simplified systems models, not replicas of proprietary hardware or processes.
 
-- Fault injection is explicit and controlled.
-- Detection is separated from injection to model alerting latency.
-- Recovery is separated from validation so a recovery action is not treated as success until health checks finish.
-- Incident evidence records each stage of the response path.
-- The health endpoint returns `503` only during confirmed incidents, making probe behavior observable.
-- Metrics are scrape-friendly for later Prometheus/Grafana integration.
+## Scenario library
+
+`src/scenario-library.js` maps operational scenarios to the shared core. Each scenario declares:
+
+- environment
+- failure type
+- target asset
+- scenario summary
+- expected reliability response
+
+Future versions can extend this contract with prerequisites, acceptance criteria, runbook actions, event timelines, and exported evidence.
+
+## Next architectural layers
+
+Planned additions include MQTT/OPC-UA adapters, PostgreSQL event history, Grafana dashboards, factory lot/recipe models, ground-link failover, readiness/acceptance test suites, and container/Kubernetes deployment targets.
