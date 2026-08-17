@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Orbital Reliability Lab</title>
-  <meta name="description" content="Fault injection, detection, recovery validation, and incident evidence in a mission-control-inspired reliability lab." />
+  <meta name="description" content="A systems reliability, automation, and operations engineering lab for high-consequence factory and mission environments." />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -14,74 +14,67 @@
       <div class="brand">
         <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
         <div>
-          <p class="eyebrow">ORBITAL SYSTEMS / RELIABILITY ENGINEERING</p>
+          <p class="eyebrow">HIGH-CONSEQUENCE SYSTEMS / RELIABILITY ENGINEERING</p>
           <h1>Orbital Reliability Lab</h1>
         </div>
       </div>
       <div class="clock-block">
-        <span>MISSION ELAPSED</span>
+        <span>LAB UPTIME · v0.2.0 SYSTEMS CORE</span>
         <strong id="uptime">T+ 00:00:00</strong>
       </div>
     </header>
 
+    <section class="workspace-grid">
+      <article class="panel">
+        <div class="panel-title">
+          <div><p class="eyebrow">SIMULATION ENVIRONMENT</p><h3>Operational Domain</h3></div>
+          <span class="armed">DUAL DOMAIN</span>
+        </div>
+        <p class="panel-copy">The same reliability core now runs two high-consequence simulation environments.</p>
+        <div class="fault-grid">
+          <button data-environment="mission"><span>01</span><b>Mission Operations</b><small>Ground systems · telemetry · command · tracking</small></button>
+          <button data-environment="factory"><span>02</span><b>Factory Operations</b><small>Equipment · automation · production tracking · controls</small></button>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-title">
+          <div><p class="eyebrow">SCENARIO LIBRARY</p><h3>Domain Failure Scenarios</h3></div>
+          <span class="armed">RUNBOOK MODE</span>
+        </div>
+        <p class="panel-copy" id="scenarioDescription">Run domain-specific failures through the shared reliability loop.</p>
+        <div class="fault-grid" id="scenarioList"></div>
+      </article>
+    </section>
+
     <section class="status-hero" id="statusHero">
       <div>
-        <p class="eyebrow">SYSTEM STATE</p>
+        <p class="eyebrow" id="environmentCode">MISSION OPS / SYSTEM STATE</p>
         <div class="state-row"><span class="pulse-dot"></span><h2 id="systemStatus">NOMINAL</h2></div>
-        <p id="statusSubtext">All telemetry channels operating within expected thresholds.</p>
+        <p id="statusSubtext">All monitored systems operating within expected thresholds.</p>
       </div>
       <div class="hero-stats">
+        <div><span>ENVIRONMENT</span><strong id="environmentName">MISSION OPS</strong></div>
         <div><span>INCIDENTS</span><strong id="incidentCount">0</strong></div>
         <div><span>LAST MTTR</span><strong id="mttr">—</strong></div>
-        <div><span>AUTO RECOVERY</span><strong id="autoState">ARMED</strong></div>
       </div>
     </section>
 
     <section class="metric-grid">
-      <article class="metric-card">
-        <div class="metric-head"><span>LATENCY</span><small>TELEMETRY API</small></div>
-        <strong><span id="latency">22</span><em>ms</em></strong>
-        <div class="meter"><i id="latencyBar"></i></div>
-        <p>Target &lt; 100 ms</p>
-      </article>
-      <article class="metric-card">
-        <div class="metric-head"><span>PACKET LOSS</span><small>UPLINK</small></div>
-        <strong><span id="packetLoss">0.1</span><em>%</em></strong>
-        <div class="meter"><i id="packetBar"></i></div>
-        <p>Target &lt; 1.0%</p>
-      </article>
-      <article class="metric-card">
-        <div class="metric-head"><span>COMPUTE</span><small>CPU UTILIZATION</small></div>
-        <strong><span id="cpu">31</span><em>%</em></strong>
-        <div class="meter"><i id="cpuBar"></i></div>
-        <p>Target &lt; 85%</p>
-      </article>
-      <article class="metric-card">
-        <div class="metric-head"><span>THROUGHPUT</span><small>EVENT STREAM</small></div>
-        <strong><span id="throughput">1,260</span><em>rps</em></strong>
-        <div class="meter"><i id="throughputBar"></i></div>
-        <p>Nominal 1.1k–1.45k rps</p>
-      </article>
+      <article class="metric-card"><div class="metric-head"><span>LATENCY</span><small id="latencyContext">TELEMETRY GATEWAY</small></div><strong><span id="latency">22</span><em>ms</em></strong><div class="meter"><i id="latencyBar"></i></div><p>Target &lt; 100 ms</p></article>
+      <article class="metric-card"><div class="metric-head"><span>PACKET LOSS</span><small id="packetContext">GROUND LINK</small></div><strong><span id="packetLoss">0.1</span><em>%</em></strong><div class="meter"><i id="packetBar"></i></div><p>Target &lt; 1.0%</p></article>
+      <article class="metric-card"><div class="metric-head"><span>COMPUTE</span><small id="cpuContext">MISSION SERVICES</small></div><strong><span id="cpu">31</span><em>%</em></strong><div class="meter"><i id="cpuBar"></i></div><p>Target &lt; 85%</p></article>
+      <article class="metric-card"><div class="metric-head"><span>THROUGHPUT</span><small id="throughputContext">EVENT STREAM</small></div><strong><span id="throughput">1,260</span><em>rps</em></strong><div class="meter"><i id="throughputBar"></i></div><p>Nominal 1.1k–1.45k rps</p></article>
     </section>
 
     <section class="workspace-grid">
-      <article class="panel fault-panel">
+      <article class="panel">
         <div class="panel-title">
-          <div><p class="eyebrow">CHAOS CONTROLS</p><h3>Fault Injection</h3></div>
-          <span class="armed">LAB MODE</span>
+          <div><p class="eyebrow">OPERATIONAL TOPOLOGY</p><h3 id="systemsTitle">Mission Operations Systems</h3></div>
+          <span class="live"><i></i> MONITORED</span>
         </div>
-        <p class="panel-copy">Inject controlled failures, verify detection, isolate the fault domain, and validate recovery.</p>
-        <div class="fault-grid">
-          <button data-fault="latency"><span>01</span><b>Latency</b><small>860 ms response time</small></button>
-          <button data-fault="packet_loss"><span>02</span><b>Packet Loss</b><small>18.4% uplink loss</small></button>
-          <button data-fault="cpu_spike"><span>03</span><b>Compute Spike</b><small>98.7% CPU saturation</small></button>
-          <button data-fault="service_down"><span>04</span><b>Service Down</b><small>Telemetry API unavailable</small></button>
-        </div>
-        <div class="control-row">
-          <label class="toggle"><input id="autoRecovery" type="checkbox" checked><span></span> Automatic recovery</label>
-          <button class="secondary" id="recoverButton">Manual Recover</button>
-          <button class="secondary" id="resetButton">Reset Lab</button>
-        </div>
+        <p class="panel-copy" id="environmentDescription"></p>
+        <div id="systemsGrid" class="event-log"></div>
       </article>
 
       <article class="panel log-panel">
@@ -93,22 +86,38 @@
       </article>
     </section>
 
-    <section class="flow-panel">
-      <div class="flow-node"><span>01</span><b>INJECT</b><small>Controlled failure</small></div>
-      <i></i>
-      <div class="flow-node"><span>02</span><b>DETECT</b><small>Threshold breach</small></div>
-      <i></i>
-      <div class="flow-node"><span>03</span><b>ISOLATE</b><small>Fault domain</small></div>
-      <i></i>
-      <div class="flow-node"><span>04</span><b>RECOVER</b><small>Automated action</small></div>
-      <i></i>
-      <div class="flow-node"><span>05</span><b>VALIDATE</b><small>Health checks</small></div>
-      <i></i>
-      <div class="flow-node"><span>06</span><b>EVIDENCE</b><small>MTTR + RCA data</small></div>
+    <section class="workspace-grid">
+      <article class="panel fault-panel">
+        <div class="panel-title"><div><p class="eyebrow">SYSTEMS CORE</p><h3>Direct Fault Injection</h3></div><span class="armed">LAB MODE</span></div>
+        <p class="panel-copy">Generic failures remain available to exercise the shared engine independently of a domain scenario.</p>
+        <div class="fault-grid">
+          <button data-fault="latency"><span>01</span><b>Latency</b><small>860 ms response time</small></button>
+          <button data-fault="packet_loss"><span>02</span><b>Packet Loss</b><small>18.4% communications loss</small></button>
+          <button data-fault="cpu_spike"><span>03</span><b>Compute Spike</b><small>98.7% CPU saturation</small></button>
+          <button data-fault="service_down"><span>04</span><b>Service Down</b><small>Critical service unavailable</small></button>
+        </div>
+        <div class="control-row">
+          <label class="toggle"><input id="autoRecovery" type="checkbox" checked><span></span> Automatic recovery</label>
+          <button class="secondary" id="recoverButton">Manual Recover</button>
+          <button class="secondary" id="resetButton">Reset Environment</button>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-title"><div><p class="eyebrow">SYSTEMS CORE</p><h3>Shared Reliability Contract</h3></div><span class="armed">v0.2</span></div>
+        <p class="panel-copy">Factory and mission simulations now share one response lifecycle, one evidence model, and one API surface.</p>
+        <section class="flow-panel">
+          <div class="flow-node"><span>01</span><b>INJECT</b><small>Known failure</small></div><i></i>
+          <div class="flow-node"><span>02</span><b>DETECT</b><small>Threshold</small></div><i></i>
+          <div class="flow-node"><span>03</span><b>ISOLATE</b><small>Fault domain</small></div><i></i>
+          <div class="flow-node"><span>04</span><b>RECOVER</b><small>Action</small></div><i></i>
+          <div class="flow-node"><span>05</span><b>VALIDATE</b><small>Health</small></div>
+        </section>
+      </article>
     </section>
 
     <footer>
-      <span>Independent engineering portfolio project · Not affiliated with SpaceX, Tesla, or their subsidiaries.</span>
+      <span>Independent engineering portfolio project · Not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries.</span>
       <strong>Built by Alexander Taylor · Lordkoii</strong>
     </footer>
   </main>
