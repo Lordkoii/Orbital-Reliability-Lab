@@ -2,12 +2,7 @@ const $ = (id) => document.getElementById(id);
 const faultButtons = [...document.querySelectorAll('[data-fault]')];
 const environmentButtons = [...document.querySelectorAll('[data-environment]')];
 
-const fmtTime = (seconds) => {
-  const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
-  const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
-  const s = String(seconds % 60).padStart(2, '0');
-  return `T+ ${h}:${m}:${s}`;
-};
+const fmtTime = (seconds) => { const h = String(Math.floor(seconds / 3600)).padStart(2, '0'); const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0'); const s = String(seconds % 60).padStart(2, '0'); return `T+ ${h}:${m}:${s}`; };
 const pct = (v, max) => `${Math.min(100, Math.max(3, (v / max) * 100))}%`;
 function setMeter(el, width, danger) { el.style.width = width; el.style.background = danger ? 'var(--red)' : 'var(--cyan)'; }
 
@@ -20,99 +15,76 @@ function renderSystems(snapshot) {
       ${canAdvance ? `<button class="advance-button" data-advance="${system.id}">ADVANCE LIFECYCLE</button>` : ''}
     </article>`;
   }).join('');
-
   document.querySelectorAll('[data-advance]').forEach((button) => button.addEventListener('click', async () => {
-    await fetch('/api/systems/advance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: button.dataset.advance }) });
-    refresh();
+    await fetch('/api/systems/advance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: button.dataset.advance }) }); refresh();
   }));
 }
 
 function renderScenarios(scenarios, activeFault) {
-  $('scenarioList').innerHTML = scenarios.map((scenario, index) => `<button data-scenario="${scenario.id}" ${activeFault ? 'disabled' : ''}>
-    <span>${String(index + 1).padStart(2, '0')}</span><b>${scenario.name}</b><small>${scenario.target} · ${scenario.summary}</small></button>`).join('');
+  $('scenarioList').innerHTML = scenarios.map((scenario, index) => `<button data-scenario="${scenario.id}" ${activeFault ? 'disabled' : ''}><span>${String(index + 1).padStart(2, '0')}</span><b>${scenario.name}</b><small>${scenario.target} · ${scenario.summary}</small></button>`).join('');
   document.querySelectorAll('[data-scenario]').forEach((button) => button.addEventListener('click', async () => {
-    await fetch('/api/scenarios/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: button.dataset.scenario }) });
-    refresh();
+    await fetch('/api/scenarios/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: button.dataset.scenario }) }); refresh();
   }));
 }
 
 function renderImpact(snapshot) {
   const impact = snapshot.operationalImpact;
-  $('impactLevel').textContent = impact.level;
-  $('impactBadge').textContent = impact.level;
-  $('impactBadge').dataset.level = impact.level;
-  $('impactHeadline').textContent = impact.headline;
-  $('impactDetail').textContent = impact.detail;
+  $('impactLevel').textContent = impact.level; $('impactBadge').textContent = impact.level; $('impactBadge').dataset.level = impact.level;
+  $('impactHeadline').textContent = impact.headline; $('impactDetail').textContent = impact.detail;
   $('activePath').innerHTML = snapshot.activePath.map((id, index) => `${index ? '<span class="path-arrow">→</span>' : ''}<span class="path-node">${id}</span>`).join('');
-  $('affectedSystems').innerHTML = impact.affected.length
-    ? impact.affected.map(id => `<span class="system-chip">${id}</span>`).join('')
-    : '<span class="system-chip muted-chip">NONE</span>';
+  $('affectedSystems').innerHTML = impact.affected.length ? impact.affected.map(id => `<span class="system-chip">${id}</span>`).join('') : '<span class="system-chip muted-chip">NONE</span>';
+}
+
+function renderProduction(snapshot) {
+  const panel = $('productionSection');
+  if (snapshot.environment.id !== 'factory' || !snapshot.production) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const production = snapshot.production;
+  $('wipLots').textContent = production.metrics.wipLots;
+  $('wipWafers').textContent = production.metrics.wafersInWip;
+  $('heldLots').textContent = production.metrics.heldLots;
+  $('completedLots').textContent = production.metrics.completedLots;
+  $('lotGrid').innerHTML = production.lots.map((lot) => {
+    const disabled = snapshot.activeFault || lot.status === 'HOLD' || lot.status === 'COMPLETED';
+    const history = lot.history.slice(-4).reverse().map(item => `<li><span>${item.event.replaceAll('_',' ')}</span><small>${item.operation || item.reason || ''}${item.tool ? ` · ${item.tool}` : ''}</small></li>`).join('');
+    return `<article class="lot-card" data-lot-id="${lot.id}" data-status="${lot.status}">
+      <div class="lot-top"><div><strong>${lot.id}</strong><small>${lot.wafers} wafers · ${lot.recipeId}</small></div><span>${lot.status}</span></div>
+      <div class="lot-route"><b>${lot.currentOperation}</b><small>${lot.assignedTool || 'ROUTE COMPLETE'}</small></div>
+      <div class="lot-progress"><i style="width:${lot.progressPct}%"></i></div>
+      <p>${lot.progressPct}% route complete${lot.holdReason ? ` · HOLD: ${lot.holdReason}` : ''}</p>
+      <ul>${history}</ul>
+      <button class="advance-button" data-lot-advance="${lot.id}" ${disabled ? 'disabled' : ''}>${lot.status === 'RUNNING' ? 'COMPLETE OPERATION' : 'START OPERATION'}</button>
+    </article>`;
+  }).join('');
+  document.querySelectorAll('[data-lot-advance]').forEach((button) => button.addEventListener('click', async () => {
+    await fetch('/api/production/advance', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:button.dataset.lotAdvance }) }); refresh();
+  }));
 }
 
 function render(snapshot) {
-  $('statusHero').dataset.state = snapshot.status;
-  $('systemStatus').textContent = snapshot.status;
-  $('uptime').textContent = fmtTime(snapshot.uptimeSeconds);
-  $('mttr').textContent = snapshot.lastMttrMs ? `${(snapshot.lastMttrMs / 1000).toFixed(1)}s` : '—';
-  $('autoRecovery').checked = snapshot.autoRecovery;
-
+  $('statusHero').dataset.state = snapshot.status; $('systemStatus').textContent = snapshot.status; $('uptime').textContent = fmtTime(snapshot.uptimeSeconds);
+  $('mttr').textContent = snapshot.lastMttrMs ? `${(snapshot.lastMttrMs / 1000).toFixed(1)}s` : '—'; $('autoRecovery').checked = snapshot.autoRecovery;
   const environment = snapshot.environment;
-  $('environmentCode').textContent = `${environment.code} / SYSTEM STATE`;
-  $('environmentName').textContent = environment.code;
-  $('environmentDescription').textContent = environment.description;
-  $('systemsTitle').textContent = `${environment.name} Systems`;
+  $('environmentCode').textContent = `${environment.code} / SYSTEM STATE`; $('environmentName').textContent = environment.code;
+  $('environmentDescription').textContent = environment.description; $('systemsTitle').textContent = `${environment.name} Systems`;
   $('scenarioDescription').textContent = `${environment.objective} Run a controlled scenario to observe dependency-aware impact and recovery.`;
-  $('latencyContext').textContent = environment.metricLabels.latency[1];
-  $('packetContext').textContent = environment.metricLabels.packetLoss[1];
-  $('cpuContext').textContent = environment.metricLabels.compute[1];
-  $('throughputContext').textContent = environment.metricLabels.throughput[1];
-
-  renderSystems(snapshot); renderScenarios(snapshot.scenarios, snapshot.activeFault); renderImpact(snapshot);
-
+  $('latencyContext').textContent = environment.metricLabels.latency[1]; $('packetContext').textContent = environment.metricLabels.packetLoss[1];
+  $('cpuContext').textContent = environment.metricLabels.compute[1]; $('throughputContext').textContent = environment.metricLabels.throughput[1];
+  renderSystems(snapshot); renderScenarios(snapshot.scenarios, snapshot.activeFault); renderImpact(snapshot); renderProduction(snapshot);
   const m = snapshot.metrics;
-  $('latency').textContent = Math.round(m.latencyMs).toLocaleString();
-  $('packetLoss').textContent = m.packetLossPct.toFixed(1);
-  $('cpu').textContent = m.cpuPct.toFixed(0);
-  $('throughput').textContent = Math.round(m.throughputRps).toLocaleString();
-  setMeter($('latencyBar'), pct(m.latencyMs, 1000), m.latencyMs > 100);
-  setMeter($('packetBar'), pct(m.packetLossPct, 20), m.packetLossPct > 1);
-  setMeter($('cpuBar'), pct(m.cpuPct, 100), m.cpuPct > 85);
-  setMeter($('throughputBar'), pct(m.throughputRps, 1450), m.throughputRps < 900);
-
-  const active = Boolean(snapshot.activeFault);
-  faultButtons.forEach((button) => button.disabled = active);
-  environmentButtons.forEach((button) => button.disabled = active);
-  $('statusSubtext').textContent = snapshot.activeFault
-    ? `${snapshot.activeFault.incidentId} · ${snapshot.activeFault.label}${snapshot.activeFault.target ? ` · ${snapshot.activeFault.target}` : ''}`
-    : snapshot.status === 'RECOVERING' ? 'Recovery in progress. Validating health and dependent flows.'
-    : `${environment.name} nominal. ${environment.objective}`;
+  $('latency').textContent = Math.round(m.latencyMs).toLocaleString(); $('packetLoss').textContent = m.packetLossPct.toFixed(1); $('cpu').textContent = m.cpuPct.toFixed(0); $('throughput').textContent = Math.round(m.throughputRps).toLocaleString();
+  setMeter($('latencyBar'), pct(m.latencyMs, 1000), m.latencyMs > 100); setMeter($('packetBar'), pct(m.packetLossPct, 20), m.packetLossPct > 1); setMeter($('cpuBar'), pct(m.cpuPct, 100), m.cpuPct > 85); setMeter($('throughputBar'), pct(m.throughputRps, 1450), m.throughputRps < 900);
+  const active = Boolean(snapshot.activeFault); faultButtons.forEach((button) => button.disabled = active); environmentButtons.forEach((button) => button.disabled = active);
+  $('statusSubtext').textContent = snapshot.activeFault ? `${snapshot.activeFault.incidentId} · ${snapshot.activeFault.label}${snapshot.activeFault.target ? ` · ${snapshot.activeFault.target}` : ''}` : snapshot.status === 'RECOVERING' ? 'Recovery in progress. Validating health, dependencies, and production state.' : `${environment.name} nominal. ${environment.objective}`;
 }
 
-function renderEvents(events) {
-  $('eventLog').innerHTML = events.map((e) => {
-    const time = new Date(e.at).toLocaleTimeString([], { hour12: false });
-    return `<div class="event ${e.severity}"><time>${time}</time><b>${e.source}</b><p>${e.message}</p></div>`;
-  }).join('');
-}
+function renderEvents(events) { $('eventLog').innerHTML = events.map((e) => { const time = new Date(e.at).toLocaleTimeString([], { hour12: false }); return `<div class="event ${e.severity}"><time>${time}</time><b>${e.source}</b><p>${e.message}</p></div>`; }).join(''); }
+async function refresh() { try { const [telemetry, events] = await Promise.all([fetch('/api/telemetry').then(r => r.json()), fetch('/api/events').then(r => r.json())]); render(telemetry); renderEvents(events.events); } catch { $('systemStatus').textContent = 'LINK LOST'; $('statusSubtext').textContent = 'Unable to reach local systems core.'; } }
 
-async function refresh() {
-  try {
-    const [telemetry, events] = await Promise.all([fetch('/api/telemetry').then(r => r.json()), fetch('/api/events').then(r => r.json())]);
-    render(telemetry); renderEvents(events.events);
-  } catch { $('systemStatus').textContent = 'LINK LOST'; $('statusSubtext').textContent = 'Unable to reach local systems core.'; }
-}
-
-environmentButtons.forEach((button) => button.addEventListener('click', async () => {
-  await fetch('/api/environment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: button.dataset.environment }) }); refresh();
-}));
-faultButtons.forEach((button) => button.addEventListener('click', async () => {
-  await fetch('/api/faults', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: button.dataset.fault }) }); refresh();
-}));
-$('recoverButton').addEventListener('click', async () => { await fetch('/api/recover', { method: 'POST' }); refresh(); });
-$('resetButton').addEventListener('click', async () => { await fetch('/api/reset', { method: 'POST' }); refresh(); });
-$('autoRecovery').addEventListener('change', async (event) => {
-  await fetch('/api/auto-recovery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: event.target.checked }) }); refresh();
-});
-
-await refresh();
-setInterval(refresh, 650);
+environmentButtons.forEach((button) => button.addEventListener('click', async () => { await fetch('/api/environment', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:button.dataset.environment }) }); refresh(); }));
+faultButtons.forEach((button) => button.addEventListener('click', async () => { await fetch('/api/faults', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ type:button.dataset.fault }) }); refresh(); }));
+$('newLotButton').addEventListener('click', async () => { await fetch('/api/production/lots', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ wafers:25, recipeId:'ORL-DEMO-01' }) }); refresh(); });
+$('recoverButton').addEventListener('click', async () => { await fetch('/api/recover', { method:'POST' }); refresh(); });
+$('resetButton').addEventListener('click', async () => { await fetch('/api/reset', { method:'POST' }); refresh(); });
+$('autoRecovery').addEventListener('change', async (event) => { await fetch('/api/auto-recovery', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ enabled:event.target.checked }) }); refresh(); });
+await refresh(); setInterval(refresh, 650);
