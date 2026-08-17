@@ -51,10 +51,15 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/api/health') {
     const snapshot = engine.getSnapshot();
     return sendJson(res, snapshot.status === 'INCIDENT' ? 503 : 200, {
-      ok: snapshot.status !== 'INCIDENT', status: snapshot.status, updatedAt: snapshot.updatedAt
+      ok: snapshot.status !== 'INCIDENT',
+      status: snapshot.status,
+      environment: snapshot.environment.id,
+      updatedAt: snapshot.updatedAt
     });
   }
   if (req.method === 'GET' && pathname === '/api/telemetry') return sendJson(res, 200, engine.getSnapshot());
+  if (req.method === 'GET' && pathname === '/api/environments') return sendJson(res, 200, { environments: engine.listEnvironments() });
+  if (req.method === 'GET' && pathname === '/api/scenarios') return sendJson(res, 200, { scenarios: engine.getScenarios() });
   if (req.method === 'GET' && pathname === '/api/metrics') {
     const snapshot = engine.getSnapshot();
     const stateMap = { NOMINAL: 0, DEGRADED: 1, INCIDENT: 2, RECOVERING: 3 };
@@ -62,10 +67,13 @@ const server = http.createServer(async (req, res) => {
       '# HELP orbital_system_state 0=nominal, 1=degraded, 2=incident, 3=recovering',
       '# TYPE orbital_system_state gauge',
       `orbital_system_state ${stateMap[snapshot.status] ?? -1}`,
-      '# HELP orbital_telemetry_latency_ms Simulated telemetry API latency',
+      '# HELP orbital_environment_info Active simulation environment',
+      '# TYPE orbital_environment_info gauge',
+      `orbital_environment_info{environment="${snapshot.environment.id}"} 1`,
+      '# HELP orbital_telemetry_latency_ms Simulated service or control-path latency',
       '# TYPE orbital_telemetry_latency_ms gauge',
       `orbital_telemetry_latency_ms ${snapshot.metrics.latencyMs.toFixed(2)}`,
-      '# HELP orbital_packet_loss_percent Simulated uplink packet loss percentage',
+      '# HELP orbital_packet_loss_percent Simulated communications packet loss percentage',
       '# TYPE orbital_packet_loss_percent gauge',
       `orbital_packet_loss_percent ${snapshot.metrics.packetLossPct.toFixed(3)}`,
       '# HELP orbital_cpu_percent Simulated compute utilization percentage',
@@ -86,9 +94,19 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && pathname === '/api/events') return sendJson(res, 200, { events: engine.events });
 
+  if (req.method === 'POST' && pathname === '/api/environment') {
+    const body = await readJson(req);
+    const result = engine.setEnvironment(body.id);
+    return sendJson(res, result.ok ? 200 : 409, result);
+  }
+  if (req.method === 'POST' && pathname === '/api/scenarios/run') {
+    const body = await readJson(req);
+    const result = engine.runScenario(body.id);
+    return sendJson(res, result.ok ? 202 : 409, result);
+  }
   if (req.method === 'POST' && pathname === '/api/faults') {
     const body = await readJson(req);
-    const result = engine.injectFault(body.type);
+    const result = engine.injectFault(body.type, { target: body.target || null });
     return sendJson(res, result.ok ? 202 : 409, result);
   }
   if (req.method === 'POST' && pathname === '/api/recover') {
@@ -100,8 +118,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, engine.setAutoRecovery(body.enabled));
   }
   if (req.method === 'POST' && pathname === '/api/reset') {
-    engine.reset();
-    return sendJson(res, 200, engine.getSnapshot());
+    return sendJson(res, 200, engine.reset());
   }
 
   if (req.method === 'GET' && await serveStatic(res, pathname)) return;
