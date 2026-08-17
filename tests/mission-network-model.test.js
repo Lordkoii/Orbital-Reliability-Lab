@@ -14,13 +14,17 @@ test('mission network starts on primary route with READY readiness', () => {
   assert.equal(snapshot.frames.lastWindow.continuityPct, 100);
 });
 
-test('ground-link loss fails over to GS-B and validates primary restoration', async () => {
+test('ground-link loss degrades readiness, fails over to GS-B, and validates primary restoration', async () => {
   const model = new MissionNetworkModel();
   model.inject('GS-A', 'packet_loss');
-  assert.equal(model.snapshot().frames.lastWindow.continuityPct, 80);
+  let snapshot = model.snapshot();
+  assert.equal(snapshot.frames.lastWindow.continuityPct, 80);
+  assert.equal(snapshot.readiness.state, 'DEGRADED');
+  assert.equal(snapshot.readiness.checks.find(check => check.id === 'continuity').status, 'WARN');
+
   await sleep(5);
   model.detect('GS-A');
-  let snapshot = model.snapshot();
+  snapshot = model.snapshot();
   assert.equal(snapshot.route.groundStation, 'GS-B');
   assert.equal(snapshot.route.mode, 'REDUNDANT');
   assert.equal(snapshot.failover.type, 'GROUND');
@@ -28,6 +32,7 @@ test('ground-link loss fails over to GS-B and validates primary restoration', as
   assert.equal(snapshot.failover.to, 'GS-B');
   assert.ok(snapshot.failover.totalInterruptionMs >= 181);
   assert.equal(snapshot.frames.lastWindow.continuityPct, 100);
+  assert.equal(snapshot.readiness.state, 'DEGRADED');
 
   model.recover('GS-A');
   snapshot = model.validate('GS-A');
