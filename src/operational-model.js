@@ -20,7 +20,7 @@ export class OperationalModel {
       affected: []
     };
     this.activePath = environment.id === 'mission'
-      ? ['GS-A', 'TEL-GW-01', 'MDB-01']
+      ? ['GS-A', 'TEL-GW-01', 'NET-CORE-01', 'MDB-01']
       : [...environment.flow];
     return this.snapshot();
   }
@@ -74,8 +74,18 @@ export class OperationalModel {
     if (this.environment.id === 'mission' && targetId === 'GS-A') {
       this.update('GS-B', { state: 'PRIMARY', health: 'NOMINAL', note: 'Redundant ground path carrying telemetry' });
       this.update('TEL-GW-01', { state: 'READY', health: 'NOMINAL', note: 'Telemetry continuity restored through GS-B' });
-      this.activePath = ['GS-B', 'TEL-GW-01', 'MDB-01'];
+      this.activePath = ['GS-B', 'TEL-GW-01', 'NET-CORE-01', 'MDB-01'];
       this.setImpact('RECOVERING', 'Ground-path failover active', 'Telemetry has been restored through the redundant station while GS-A recovers.', ['GS-A', 'GS-B']);
+    } else if (this.environment.id === 'mission' && targetId === 'TEL-GW-01') {
+      this.update('TEL-GW-02', { state: 'PRIMARY', health: 'NOMINAL', note: 'Redundant telemetry gateway carrying mission traffic' });
+      this.update('NET-CORE-01', { state: 'READY', health: 'NOMINAL', note: 'Mission network receiving telemetry through TEL-GW-02' });
+      this.update('TRACK-01', { state: 'READY', health: 'NOMINAL', note: 'Tracking feed restored through redundant gateway' });
+      this.activePath = ['GS-A', 'TEL-GW-02', 'NET-CORE-01', 'MDB-01'];
+      this.setImpact('RECOVERING', 'Telemetry-gateway failover active', 'Mission telemetry has moved to TEL-GW-02 while the primary gateway recovers.', ['TEL-GW-01', 'TEL-GW-02', 'NET-CORE-01']);
+    } else if (this.environment.id === 'mission' && targetId === 'NET-CORE-01') {
+      this.update('TRACK-01', { state: 'READY', health: 'NOMINAL', note: 'Tracking dependency restored; validation pending' });
+      this.update('CMD-01', { state: 'READY', health: 'NOMINAL', note: 'Command dependency restored; validation pending' });
+      this.setImpact('RECOVERING', 'Mission network reconnecting', 'Telemetry, tracking, and command dependencies are restored and awaiting continuity validation.', ['NET-CORE-01', 'TRACK-01', 'CMD-01']);
     } else {
       this.setImpact('RECOVERING', 'Recovery in progress', `${targetId} is being restored and dependent systems are awaiting validation.`, [targetId]);
     }
@@ -88,6 +98,9 @@ export class OperationalModel {
     if (this.environment.id === 'mission' && targetId === 'GS-A' && previousPath[0] === 'GS-B') {
       result.lastValidatedPath = 'GS-B failover path validated before primary-path restoration';
     }
+    if (this.environment.id === 'mission' && targetId === 'TEL-GW-01' && previousPath[1] === 'TEL-GW-02') {
+      result.lastValidatedPath = 'TEL-GW-02 failover path validated before primary-gateway restoration';
+    }
     return result;
   }
 
@@ -97,8 +110,14 @@ export class OperationalModel {
       this.update('TEL-GW-01', { state: 'DEGRADED', health: 'WARNING', note: 'Primary ground input degraded' });
       this.setImpact('DEGRADED', 'Primary ground path degraded', 'Telemetry continuity is at risk; redundant path remains available.', ['GS-A', 'TEL-GW-01']);
     } else if (targetId === 'TEL-GW-01') {
-      this.update('TRACK-01', { state: 'DEGRADED', health: 'WARNING', note: 'Tracking feed waiting on telemetry gateway' });
-      this.setImpact('DEGRADED', 'Telemetry distribution degraded', 'Tracking consumers are receiving incomplete or delayed event flow.', ['TEL-GW-01', 'TRACK-01']);
+      this.update('TEL-GW-02', { state: 'STANDBY', health: 'NOMINAL', note: 'Redundant gateway ready to receive mission telemetry' });
+      this.update('NET-CORE-01', { state: 'DEGRADED', health: 'WARNING', note: 'Primary telemetry gateway unavailable' });
+      this.update('TRACK-01', { state: 'DEGRADED', health: 'WARNING', note: 'Tracking feed waiting on validated telemetry gateway' });
+      this.setImpact('DEGRADED', 'Telemetry gateway degraded', 'The primary gateway is unavailable; redundant gateway failover is armed.', ['TEL-GW-01', 'TEL-GW-02', 'NET-CORE-01', 'TRACK-01']);
+    } else if (targetId === 'NET-CORE-01') {
+      this.update('TRACK-01', { state: 'DEGRADED', health: 'WARNING', note: 'Mission network dependency degraded' });
+      this.update('CMD-01', { state: 'DEGRADED', health: 'WARNING', note: 'Command network dependency degraded' });
+      this.setImpact('DEGRADED', 'Mission network fabric degraded', 'Telemetry distribution, tracking, and command dependencies are at risk.', ['NET-CORE-01', 'TRACK-01', 'CMD-01']);
     } else if (targetId === 'CMD-01') {
       this.setImpact('DEGRADED', 'Command capacity degraded', 'Command processing remains available but exceeds normal compute thresholds.', ['CMD-01']);
     }
@@ -108,10 +127,18 @@ export class OperationalModel {
     if (targetId === 'GS-A') {
       this.update('GS-B', { state: 'FAILOVER', health: 'WARNING', note: 'Taking over primary ground-link traffic' });
       this.update('TEL-GW-01', { state: 'FAILOVER', health: 'WARNING', note: 'Rebinding telemetry input to GS-B' });
+      this.activePath = ['GS-B', 'TEL-GW-01', 'NET-CORE-01', 'MDB-01'];
       this.setImpact('CRITICAL', 'Ground-link failover initiated', 'GS-A is isolated and GS-B is assuming telemetry traffic.', ['GS-A', 'GS-B', 'TEL-GW-01']);
     } else if (targetId === 'TEL-GW-01') {
-      this.update('TRACK-01', { state: 'BLOCKED', health: 'WARNING', note: 'No validated telemetry feed available' });
-      this.setImpact('CRITICAL', 'Telemetry gateway unavailable', 'Dependent tracking services are blocked until gateway recovery.', ['TEL-GW-01', 'TRACK-01']);
+      this.update('TEL-GW-02', { state: 'FAILOVER', health: 'WARNING', note: 'Taking over telemetry ingest from TEL-GW-01' });
+      this.update('NET-CORE-01', { state: 'FAILOVER', health: 'WARNING', note: 'Rebinding telemetry distribution to TEL-GW-02' });
+      this.update('TRACK-01', { state: 'DEGRADED', health: 'WARNING', note: 'Tracking feed awaiting gateway route validation' });
+      this.activePath = ['GS-A', 'TEL-GW-02', 'NET-CORE-01', 'MDB-01'];
+      this.setImpact('CRITICAL', 'Telemetry-gateway failover initiated', 'TEL-GW-01 is isolated and TEL-GW-02 is assuming mission telemetry traffic.', ['TEL-GW-01', 'TEL-GW-02', 'NET-CORE-01', 'TRACK-01']);
+    } else if (targetId === 'NET-CORE-01') {
+      this.update('TRACK-01', { state: 'BLOCKED', health: 'CRITICAL', note: 'No validated telemetry network route available' });
+      this.update('CMD-01', { state: 'BLOCKED', health: 'CRITICAL', note: 'Mission network partition blocks command dependency' });
+      this.setImpact('CRITICAL', 'Mission network partition', 'Telemetry distribution, tracking, and command services are isolated until the network fabric is restored.', ['NET-CORE-01', 'TRACK-01', 'CMD-01']);
     } else if (targetId === 'CMD-01') {
       this.setImpact('CRITICAL', 'Command service isolated', 'Command processing is unavailable until capacity is restored and validated.', ['CMD-01']);
     }

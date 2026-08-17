@@ -35,6 +35,33 @@ function renderImpact(snapshot) {
   $('affectedSystems').innerHTML = impact.affected.length ? impact.affected.map(id => `<span class="system-chip">${id}</span>`).join('') : '<span class="system-chip muted-chip">NONE</span>';
 }
 
+function renderMissionNetwork(snapshot) {
+  const panel = $('missionNetworkSection');
+  if (snapshot.environment.id !== 'mission' || !snapshot.missionNetwork) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const network = snapshot.missionNetwork;
+  const frames = network.frames;
+  const failover = network.failover;
+  const readiness = network.readiness;
+  $('missionReadiness').textContent = readiness.state; $('missionReadiness').dataset.state = readiness.state;
+  $('readinessScore').textContent = readiness.score;
+  $('missionContinuity').textContent = frames.lastWindow.continuityPct.toFixed(2);
+  $('missionFramesReceived').textContent = frames.received.toLocaleString();
+  $('missionFramesLost').textContent = frames.lost.toLocaleString();
+  $('missionInterruption').textContent = failover.totalInterruptionMs || 0;
+  $('missionGround').textContent = network.route.groundStation;
+  $('missionGateway').textContent = network.route.telemetryGateway;
+  $('missionRouteMode').textContent = network.route.mode;
+  $('missionRoute').innerHTML = network.route.path.map((id, index) => `${index ? '<span class="path-arrow">→</span>' : ''}<span class="path-node">${id}</span>`).join('');
+  $('failoverState').textContent = failover.state;
+  $('failoverRoute').textContent = failover.from && failover.to ? `${failover.from} → ${failover.to}${failover.validated ? ' · VALIDATED' : ''}` : failover.type === 'NETWORK_PARTITION' ? 'Mission backbone partition — no alternate route available.' : 'No failover recorded.';
+  $('failoverDetection').textContent = failover.detectionMs == null ? '—' : `${failover.detectionMs} ms`;
+  $('failoverTransition').textContent = failover.routeTransitionMs == null ? '—' : `${failover.routeTransitionMs} ms`;
+  $('failoverTotal').textContent = failover.totalInterruptionMs == null ? '—' : `${failover.totalInterruptionMs} ms`;
+  $('networkValidation').textContent = `${network.validation.state} · ${network.validation.detail}`;
+  $('readinessChecks').innerHTML = readiness.checks.map((check) => `<div class="readiness-check" data-check-id="${check.id}" data-status="${check.status}"><b>${check.status} · ${check.label}</b><span>${check.detail}</span></div>`).join('');
+}
+
 function renderProduction(snapshot) {
   const panel = $('productionSection');
   if (snapshot.environment.id !== 'factory' || !snapshot.production) { panel.hidden = true; return; }
@@ -70,12 +97,12 @@ function render(snapshot) {
   $('scenarioDescription').textContent = `${environment.objective} Run a controlled scenario to observe dependency-aware impact and recovery.`;
   $('latencyContext').textContent = environment.metricLabels.latency[1]; $('packetContext').textContent = environment.metricLabels.packetLoss[1];
   $('cpuContext').textContent = environment.metricLabels.compute[1]; $('throughputContext').textContent = environment.metricLabels.throughput[1];
-  renderSystems(snapshot); renderScenarios(snapshot.scenarios, snapshot.activeFault); renderImpact(snapshot); renderProduction(snapshot);
+  renderSystems(snapshot); renderScenarios(snapshot.scenarios, snapshot.activeFault); renderImpact(snapshot); renderMissionNetwork(snapshot); renderProduction(snapshot);
   const m = snapshot.metrics;
   $('latency').textContent = Math.round(m.latencyMs).toLocaleString(); $('packetLoss').textContent = m.packetLossPct.toFixed(1); $('cpu').textContent = m.cpuPct.toFixed(0); $('throughput').textContent = Math.round(m.throughputRps).toLocaleString();
   setMeter($('latencyBar'), pct(m.latencyMs, 1000), m.latencyMs > 100); setMeter($('packetBar'), pct(m.packetLossPct, 20), m.packetLossPct > 1); setMeter($('cpuBar'), pct(m.cpuPct, 100), m.cpuPct > 85); setMeter($('throughputBar'), pct(m.throughputRps, 1450), m.throughputRps < 900);
   const active = Boolean(snapshot.activeFault); faultButtons.forEach((button) => button.disabled = active); environmentButtons.forEach((button) => button.disabled = active);
-  $('statusSubtext').textContent = snapshot.activeFault ? `${snapshot.activeFault.incidentId} · ${snapshot.activeFault.label}${snapshot.activeFault.target ? ` · ${snapshot.activeFault.target}` : ''}` : snapshot.status === 'RECOVERING' ? 'Recovery in progress. Validating health, dependencies, and production state.' : `${environment.name} nominal. ${environment.objective}`;
+  $('statusSubtext').textContent = snapshot.activeFault ? `${snapshot.activeFault.incidentId} · ${snapshot.activeFault.label}${snapshot.activeFault.target ? ` · ${snapshot.activeFault.target}` : ''}` : snapshot.status === 'RECOVERING' ? 'Recovery in progress. Validating health, dependencies, continuity, and production state.' : `${environment.name} nominal. ${environment.objective}`;
 }
 
 function renderEvents(events) { $('eventLog').innerHTML = events.map((e) => { const time = new Date(e.at).toLocaleTimeString([], { hour12: false }); return `<div class="event ${e.severity}"><time>${time}</time><b>${e.source}</b><p>${e.message}</p></div>`; }).join(''); }
@@ -83,6 +110,7 @@ async function refresh() { try { const [telemetry, events] = await Promise.all([
 
 environmentButtons.forEach((button) => button.addEventListener('click', async () => { await fetch('/api/environment', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:button.dataset.environment }) }); refresh(); }));
 faultButtons.forEach((button) => button.addEventListener('click', async () => { await fetch('/api/faults', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ type:button.dataset.fault }) }); refresh(); }));
+$('transmitFramesButton').addEventListener('click', async () => { await fetch('/api/mission/frames', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ count:120 }) }); refresh(); });
 $('newLotButton').addEventListener('click', async () => { await fetch('/api/production/lots', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ wafers:25, recipeId:'ORL-DEMO-01' }) }); refresh(); });
 $('recoverButton').addEventListener('click', async () => { await fetch('/api/recover', { method:'POST' }); refresh(); });
 $('resetButton').addEventListener('click', async () => { await fetch('/api/reset', { method:'POST' }); refresh(); });

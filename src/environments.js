@@ -3,21 +3,23 @@ export const ENVIRONMENTS = {
     id: 'mission',
     code: 'MISSION OPS',
     name: 'Mission Operations',
-    description: 'Distributed ground, telemetry, command, tracking, and data services supporting a high-consequence mission environment.',
-    objective: 'Protect telemetry continuity, service redundancy, and mission readiness.',
+    description: 'Distributed ground, telemetry, command, tracking, network, and data services supporting a high-consequence mission environment.',
+    objective: 'Protect telemetry continuity, service redundancy, dependency integrity, and mission readiness.',
     metricLabels: {
       latency: ['LATENCY', 'TELEMETRY GATEWAY'],
       packetLoss: ['PACKET LOSS', 'GROUND LINK'],
       compute: ['COMPUTE', 'MISSION SERVICES'],
       throughput: ['THROUGHPUT', 'EVENT STREAM']
     },
-    flow: ['GS-A', 'TEL-GW-01', 'MDB-01'],
+    flow: ['GS-A', 'TEL-GW-01', 'NET-CORE-01', 'MDB-01'],
     assets: [
       { id: 'GS-A', name: 'Ground Station A', type: 'ground-link', nominalState: 'PRIMARY', redundancyGroup: 'ground-link' },
       { id: 'GS-B', name: 'Ground Station B', type: 'ground-link', nominalState: 'STANDBY', redundancyGroup: 'ground-link' },
-      { id: 'TEL-GW-01', name: 'Telemetry Gateway', type: 'service', nominalState: 'READY', dependsOn: ['GS-A', 'GS-B'] },
-      { id: 'TRACK-01', name: 'Tracking Service', type: 'service', nominalState: 'READY', dependsOn: ['TEL-GW-01'] },
-      { id: 'CMD-01', name: 'Command Service', type: 'service', nominalState: 'READY', dependsOn: ['MDB-01'] },
+      { id: 'TEL-GW-01', name: 'Telemetry Gateway A', type: 'service', nominalState: 'READY', redundancyGroup: 'telemetry-gateway', dependsOn: ['GS-A', 'GS-B'] },
+      { id: 'TEL-GW-02', name: 'Telemetry Gateway B', type: 'service', nominalState: 'STANDBY', redundancyGroup: 'telemetry-gateway', dependsOn: ['GS-A', 'GS-B'] },
+      { id: 'NET-CORE-01', name: 'Mission Network Core', type: 'network', nominalState: 'READY', dependsOnAny: ['TEL-GW-01', 'TEL-GW-02'] },
+      { id: 'TRACK-01', name: 'Tracking Service', type: 'service', nominalState: 'READY', dependsOn: ['NET-CORE-01'], dependsOnAny: ['TEL-GW-01', 'TEL-GW-02'] },
+      { id: 'CMD-01', name: 'Command Service', type: 'service', nominalState: 'READY', dependsOn: ['NET-CORE-01', 'MDB-01'] },
       { id: 'MDB-01', name: 'Mission Database', type: 'data', nominalState: 'READY' }
     ]
   },
