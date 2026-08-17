@@ -32,12 +32,33 @@ test('factory lifecycle endpoint advances equipment state', async ({ request }) 
   expect(body.system.state).toBe('SETUP');
 });
 
-test('MES outage holds process equipment', async ({ request }) => {
+test('factory production API exposes a seeded wafer lot and advances route state', async ({ request }) => {
   await request.post('/api/environment', { data: { id: 'factory' } });
+  const initial = await (await request.get('/api/production')).json();
+  expect(initial.production.lots).toHaveLength(1);
+  expect(initial.production.lots[0].wafers).toBe(25);
+  expect(initial.production.lots[0].currentOperation).toBe('LITHOGRAPHY');
+  const advanced = await request.post('/api/production/advance', { data: { id: initial.production.lots[0].id } });
+  expect(advanced.ok()).toBeTruthy();
+  const body = await advanced.json();
+  expect(body.lot.status).toBe('RUNNING');
+  expect(body.lot.assignedTool).toBe('LITH-01');
+});
+
+test('MES outage holds WIP and validated recovery releases it', async ({ request }) => {
+  await request.post('/api/environment', { data: { id: 'factory' } });
+  const production = await (await request.get('/api/production')).json();
+  const lotId = production.production.lots[0].id;
+  await request.post('/api/production/advance', { data: { id: lotId } });
   await request.post('/api/auto-recovery', { data: { enabled: false } });
   await request.post('/api/scenarios/run', { data: { id: 'factory-mes-gateway-outage' } });
   await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('INCIDENT');
-  const body = await (await request.get('/api/telemetry')).json();
-  expect(body.systems.find(s => s.id === 'LITH-01').state).toBe('HOLD');
-  expect(body.operationalImpact.headline).toContain('Factory execution hold');
+  let body = await (await request.get('/api/telemetry')).json();
+  expect(body.production.metrics.heldLots).toBe(1);
+  expect(body.production.lots[0].status).toBe('HOLD');
+  await request.post('/api/recover');
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('NOMINAL');
+  body = await (await request.get('/api/telemetry')).json();
+  expect(body.production.metrics.heldLots).toBe(0);
+  expect(body.production.lots[0].status).toBe('RUNNING');
 });

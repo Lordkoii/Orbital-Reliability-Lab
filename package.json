@@ -1,13 +1,13 @@
 {
   "name": "orbital-reliability-lab",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "A dual-domain reliability and operations engineering lab with dependency-aware mission and factory state models.",
+  "description": "A dual-domain reliability and operations engineering lab with mission failover and factory production/MES simulation.",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test tests/engine.test.js",
+    "test": "node --test tests/engine.test.js tests/production-model.test.js",
     "smoke": "node scripts/smoke-test.mjs",
     "test:e2e": "playwright test",
     "test:api": "playwright test tests/api.spec.js",

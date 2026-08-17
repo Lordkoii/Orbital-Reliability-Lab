@@ -1,6 +1,7 @@
 import { getEnvironment, listEnvironments } from './environments.js';
 import { getScenario, getScenarios } from './scenario-library.js';
 import { OperationalModel } from './operational-model.js';
+import { ProductionModel } from './production-model.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -11,12 +12,11 @@ export class ReliabilityEngine {
     this.incidentCounter = 0;
     this.environmentId = getEnvironment(environment) ? environment : 'mission';
     this.operationalModel = new OperationalModel(this.getEnvironment());
+    this.productionModel = new ProductionModel();
     this.reset();
   }
 
-  baselineMetrics() {
-    return { latencyMs: 22, packetLossPct: 0.1, cpuPct: 31, throughputRps: 1260, availabilityPct: 99.99 };
-  }
+  baselineMetrics() { return { latencyMs: 22, packetLossPct: 0.1, cpuPct: 31, throughputRps: 1260, availabilityPct: 99.99 }; }
 
   reset() {
     if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
@@ -28,20 +28,14 @@ export class ReliabilityEngine {
     this.lastMttrMs = null;
     const environment = this.getEnvironment();
     this.operationalModel.reset(environment);
+    if (environment.id === 'factory') this.productionModel.reset();
     this.events = [this.event('SYSTEM', `${environment.name} initialized`, 'info')];
     this.recoveryTimer = null;
     return this.getSnapshot();
   }
 
-  event(source, message, severity = 'info') {
-    return { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, at: new Date().toISOString(), source, message, severity };
-  }
-
-  pushEvent(source, message, severity = 'info') {
-    this.events.unshift(this.event(source, message, severity));
-    this.events = this.events.slice(0, 120);
-  }
-
+  event(source, message, severity = 'info') { return { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, at: new Date().toISOString(), source, message, severity }; }
+  pushEvent(source, message, severity = 'info') { this.events.unshift(this.event(source, message, severity)); this.events = this.events.slice(0, 140); }
   getEnvironment() { return getEnvironment(this.environmentId); }
   listEnvironments() { return listEnvironments(); }
   getScenarios() { return getScenarios(this.environmentId); }
@@ -64,6 +58,22 @@ export class ReliabilityEngine {
     return { ...result, snapshot: this.getSnapshot() };
   }
 
+  createLot(input = {}) {
+    if (this.environmentId !== 'factory') return { ok: false, reason: 'Production controls are only available in Factory Operations', snapshot: this.getSnapshot() };
+    if (this.activeFault) return { ok: false, reason: 'Cannot create a lot during an active incident', snapshot: this.getSnapshot() };
+    const result = this.productionModel.createLot(input);
+    if (result.ok) this.pushEvent('MES', `${result.lot.id}: created (${result.lot.wafers} wafers, ${result.lot.recipeId})`, 'success');
+    return { ...result, snapshot: this.getSnapshot() };
+  }
+
+  advanceLot(id) {
+    if (this.environmentId !== 'factory') return { ok: false, reason: 'Production controls are only available in Factory Operations', snapshot: this.getSnapshot() };
+    if (this.activeFault) return { ok: false, reason: 'Cannot advance production during an active incident', snapshot: this.getSnapshot() };
+    const result = this.productionModel.advanceLot(id);
+    if (result.ok) this.pushEvent('MES', `${id}: ${result.lot.status} · ${result.lot.currentOperation}${result.lot.assignedTool ? ` · ${result.lot.assignedTool}` : ''}`, result.lot.status === 'COMPLETED' ? 'success' : 'info');
+    return { ...result, snapshot: this.getSnapshot() };
+  }
+
   getSnapshot() {
     this.jitter();
     const operational = this.operationalModel.snapshot();
@@ -74,6 +84,7 @@ export class ReliabilityEngine {
       systems: operational.systems,
       operationalImpact: operational.impact,
       activePath: operational.activePath,
+      production: this.environmentId === 'factory' ? this.productionModel.snapshot() : null,
       scenarios: this.getScenarios(),
       activeFault: this.activeFault,
       activeScenario: this.activeScenario,
@@ -95,31 +106,20 @@ export class ReliabilityEngine {
     }
   }
 
-  setAutoRecovery(enabled) {
-    this.autoRecovery = Boolean(enabled);
-    this.pushEvent('CONTROL', `Automatic recovery ${this.autoRecovery ? 'enabled' : 'disabled'}`);
-    return this.getSnapshot();
-  }
+  setAutoRecovery(enabled) { this.autoRecovery = Boolean(enabled); this.pushEvent('CONTROL', `Automatic recovery ${this.autoRecovery ? 'enabled' : 'disabled'}`); return this.getSnapshot(); }
 
   runScenario(id) {
     const scenario = getScenario(id);
     if (!scenario) return { ok: false, reason: 'Unknown scenario', snapshot: this.getSnapshot() };
     if (scenario.environment !== this.environmentId) return { ok: false, reason: 'Scenario does not belong to the active environment', snapshot: this.getSnapshot() };
     if (this.activeFault) return { ok: false, reason: 'An incident is already active', snapshot: this.getSnapshot() };
-
     this.activeScenario = { id: scenario.id, name: scenario.name, target: scenario.target, response: scenario.response };
     this.pushEvent('SCENARIO', `${scenario.name} started against ${scenario.target}`, 'warning');
-    return this.injectFault(scenario.faultType, {
-      label: scenario.name,
-      target: scenario.target,
-      scenarioId: scenario.id,
-      summary: scenario.summary
-    });
+    return this.injectFault(scenario.faultType, { label: scenario.name, target: scenario.target, scenarioId: scenario.id, summary: scenario.summary });
   }
 
   injectFault(type, context = {}) {
     if (this.activeFault) return { ok: false, reason: 'An incident is already active', snapshot: this.getSnapshot() };
-
     const definitions = {
       latency: { label: 'Latency degradation', mutate: () => { this.metrics.latencyMs = 860; this.metrics.cpuPct = 79; this.metrics.throughputRps = 740; } },
       packet_loss: { label: 'Packet loss anomaly', mutate: () => { this.metrics.packetLossPct = 18.4; this.metrics.latencyMs = 270; this.metrics.throughputRps = 510; } },
@@ -130,21 +130,12 @@ export class ReliabilityEngine {
     if (!fault) return { ok: false, reason: 'Unknown fault type', snapshot: this.getSnapshot() };
 
     this.incidentCounter += 1;
-    this.activeFault = {
-      type,
-      label: context.label || fault.label,
-      target: context.target || null,
-      scenarioId: context.scenarioId || null,
-      summary: context.summary || null,
-      incidentId: `IR-${String(this.incidentCounter).padStart(3, '0')}`,
-      injectedAt: new Date().toISOString()
-    };
+    this.activeFault = { type, label: context.label || fault.label, target: context.target || null, scenarioId: context.scenarioId || null, summary: context.summary || null, incidentId: `IR-${String(this.incidentCounter).padStart(3, '0')}`, injectedAt: new Date().toISOString() };
     fault.mutate();
     this.status = 'DEGRADED';
     if (this.activeFault.target) this.operationalModel.inject(this.activeFault.target, type);
     const target = this.activeFault.target ? ` on ${this.activeFault.target}` : '';
     this.pushEvent('FAULT', `${this.activeFault.incidentId}: ${this.activeFault.label}${target} injected`, 'warning');
-
     setTimeout(() => this.detectActiveFault(), 700);
     return { ok: true, snapshot: this.getSnapshot() };
   }
@@ -154,32 +145,38 @@ export class ReliabilityEngine {
     this.status = 'INCIDENT';
     this.detectedAt = Date.now();
     if (this.activeFault.target) this.operationalModel.detect(this.activeFault.target);
+    if (this.environmentId === 'factory') {
+      const target = this.activeFault.target;
+      if (target === 'MES-01') this.productionModel.hold('MES unavailable; production-state integrity protection');
+      if (target === 'AMHS-01') this.productionModel.hold('Material handling unavailable');
+      if (target === 'MET-01') this.productionModel.hold('Metrology unavailable; quality release blocked', ['MET-01']);
+    }
     const target = this.activeFault.target ? ` (${this.activeFault.target})` : '';
     this.pushEvent('DETECT', `${this.activeFault.incidentId}: Threshold breach confirmed${target}`, 'critical');
-    this.pushEvent('DIAGNOSE', `${this.activeFault.incidentId}: Dependency and operational impact evaluated`, 'warning');
+    this.pushEvent('DIAGNOSE', `${this.activeFault.incidentId}: Dependency, production, and operational impact evaluated`, 'warning');
     this.pushEvent('ISOLATE', `${this.activeFault.incidentId}: Fault domain isolated`, 'warning');
-
-    if (this.autoRecovery) {
-      this.pushEvent('RECOVERY', `${this.activeFault.incidentId}: Automated recovery sequence started`, 'info');
-      this.recoveryTimer = setTimeout(() => this.recover('automatic'), 2400);
-    }
+    if (this.environmentId === 'factory' && this.productionModel.metrics().heldLots) this.pushEvent('MES', `${this.productionModel.metrics().heldLots} lot(s) placed on HOLD`, 'critical');
+    if (this.autoRecovery) { this.pushEvent('RECOVERY', `${this.activeFault.incidentId}: Automated recovery sequence started`, 'info'); this.recoveryTimer = setTimeout(() => this.recover('automatic'), 2400); }
   }
 
   recover(mode = 'manual') {
     if (!this.activeFault) return { ok: false, reason: 'No active incident', snapshot: this.getSnapshot() };
     if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
-
     const incidentId = this.activeFault.incidentId;
     const targetId = this.activeFault.target;
     this.status = 'RECOVERING';
     if (targetId) this.operationalModel.recover(targetId);
     this.pushEvent('RECOVERY', `${incidentId}: Recovery action applied (${mode})`, 'info');
-    this.pushEvent('VALIDATE', `${incidentId}: Running post-recovery health and dependency checks`, 'info');
+    this.pushEvent('VALIDATE', `${incidentId}: Running post-recovery health, dependency, and production-state checks`, 'info');
 
     setTimeout(() => {
       this.metrics = this.baselineMetrics();
       this.lastMttrMs = this.detectedAt ? Date.now() - this.detectedAt : null;
       if (targetId) this.operationalModel.validate(targetId);
+      if (this.environmentId === 'factory') {
+        const held = this.productionModel.metrics().heldLots;
+        if (held) { this.productionModel.release(); this.pushEvent('MES', `${held} held lot(s) reconciled and released after validation`, 'success'); }
+      }
       this.activeFault = null;
       this.activeScenario = null;
       this.detectedAt = null;
@@ -187,7 +184,6 @@ export class ReliabilityEngine {
       this.pushEvent('SYSTEM', `${incidentId}: Recovery validated — operational model nominal (${mode})`, 'success');
       if (this.lastMttrMs) this.pushEvent('EVIDENCE', `${incidentId}: Incident evidence captured; MTTR ${(this.lastMttrMs / 1000).toFixed(1)}s`, 'success');
     }, 650);
-
     return { ok: true, snapshot: this.getSnapshot() };
   }
 }
