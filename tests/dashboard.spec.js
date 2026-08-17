@@ -53,8 +53,8 @@ test('mission ground-link scenario updates active route and failover evidence', 
   await expect(page.locator('#failoverRoute')).toContainText('GS-A → GS-B', { timeout: 3500 });
 });
 
-test('mission network partition drives dashboard to NO-GO readiness', async ({ page }) => {
-  await page.locator('#autoRecovery').uncheck();
+test('mission network partition drives dashboard to NO-GO readiness', async ({ page, request }) => {
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
   await page.getByRole('button', { name: /Mission Network Partition/ }).click();
   await expect(page.locator('#missionReadiness')).toHaveText('NO-GO', { timeout: 3500 });
   await expect(page.locator('[data-system-id="TRACK-01"]')).toContainText('BLOCKED', { timeout: 3500 });
