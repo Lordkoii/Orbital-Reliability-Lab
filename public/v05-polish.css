@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Michroma&display=swap");
+
 /* v0.5 operator readability and demo polish
    Loaded after the historical v0.5 styles so the presentation layer can evolve
    without rewriting the earlier release stylesheets. */
@@ -5,6 +7,27 @@
 :root {
   --muted-readable: #93a5b3;
   --muted-soft: #7f93a2;
+  --font-display-tech: "Michroma", "Arial Narrow", "Segoe UI", sans-serif;
+}
+
+/* Terafab-inspired display treatment.
+   Keep telemetry/data in the existing monospace face and body copy in the
+   readable UI sans. The geometric face is reserved for product/section identity. */
+.brand h1 {
+  font-family: var(--font-display-tech);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: .075em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.panel-title h3 {
+  font-family: var(--font-display-tech);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: .025em;
+  line-height: 1.35;
 }
 
 .eyebrow {
@@ -23,7 +46,6 @@
 .metric-card em { font-size: 12px; }
 .metric-card p { font-size: 11px; color: #788c9b; }
 
-.panel-title h3 { font-size: 19px; }
 .armed, .live { font-size: 10px; padding: 7px 9px; }
 .panel-copy {
   color: var(--muted-readable);
