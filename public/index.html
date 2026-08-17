@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/v03.css" />
   <link rel="stylesheet" href="/v04.css" />
   <link rel="stylesheet" href="/v05.css" />
+  <link rel="stylesheet" href="/v05-polish.css" />
 </head>
 <body>
   <div class="stars"></div>
@@ -18,12 +19,12 @@
       <div class="clock-block"><span>LAB UPTIME · v0.5.0 MISSION NETWORK MODEL</span><strong id="uptime">T+ 00:00:00</strong></div>
     </header>
 
-    <section class="workspace-grid">
+    <section class="workspace-grid overview-grid">
       <article class="panel"><div class="panel-title"><div><p class="eyebrow">SIMULATION ENVIRONMENT</p><h3>Operational Domain</h3></div><span class="armed">DUAL DOMAIN</span></div><p class="panel-copy">One reliability core, two operational models, domain-specific dependencies and failure effects.</p><div class="fault-grid"><button data-environment="mission"><span>01</span><b>Mission Operations</b><small>Ground systems · telemetry · command · network redundancy</small></button><button data-environment="factory"><span>02</span><b>Factory Operations</b><small>Equipment · material flow · MES · production execution</small></button></div></article>
       <article class="panel"><div class="panel-title"><div><p class="eyebrow">SCENARIO LIBRARY</p><h3>Operational Failure Scenarios</h3></div><span class="armed">RUNBOOK MODE</span></div><p class="panel-copy" id="scenarioDescription">Run a failure through the shared response contract.</p><div class="fault-grid" id="scenarioList"></div></article>
     </section>
 
-    <section class="status-hero" id="statusHero"><div><p class="eyebrow" id="environmentCode">MISSION OPS / SYSTEM STATE</p><div class="state-row"><span class="pulse-dot"></span><h2 id="systemStatus">NOMINAL</h2></div><p id="statusSubtext">All monitored systems operating within expected thresholds.</p></div><div class="hero-stats"><div><span>ENVIRONMENT</span><strong id="environmentName">MISSION OPS</strong></div><div><span>OPERATIONAL IMPACT</span><strong id="impactLevel">NONE</strong></div><div><span>LAST MTTR</span><strong id="mttr">—</strong></div></div></section>
+    <section class="status-hero" id="statusHero"><div><p class="eyebrow" id="environmentCode">MISSION OPS / SYSTEM STATE</p><div class="state-row"><span class="pulse-dot"></span><h2 id="systemStatus">NOMINAL</h2></div><p id="statusSubtext">All monitored systems operating within expected thresholds.</p></div><div class="hero-stats"><div><span>ENVIRONMENT</span><strong id="environmentName">MISSION OPS</strong></div><div><span>OPERATIONAL IMPACT</span><strong id="impactLevel">NONE</strong></div><div><span>LAST RECOVERY</span><strong id="mttr">—</strong></div></div></section>
 
     <section class="metric-grid">
       <article class="metric-card"><div class="metric-head"><span>LATENCY</span><small id="latencyContext">TELEMETRY GATEWAY</small></div><strong><span id="latency">22</span><em>ms</em></strong><div class="meter"><i id="latencyBar"></i></div><p>Target &lt; 100 ms</p></article>
@@ -34,23 +35,24 @@
 
     <section class="mission-network-section" id="missionNetworkSection">
       <article class="panel mission-network-panel">
-        <div class="panel-title"><div><p class="eyebrow">MISSION NETWORK MODEL / TELEMETRY CONTINUITY</p><h3>Ground, Gateway & Dependency Routing</h3></div><span class="readiness-badge" id="missionReadiness" data-state="READY">READY</span></div>
+        <div class="panel-title"><div><p class="eyebrow">MISSION NETWORK MODEL / TELEMETRY CONTINUITY</p><h3>Ground, Gateway & Dependency Routing</h3></div><span class="readiness-badge" id="missionReadiness" data-state="READY">MISSION READY</span></div>
         <p class="panel-copy">Deterministic telemetry frames move through redundant ground and gateway routes. Failures expose continuity loss, failover timing, dependency impact, and mission readiness.</p>
         <div class="mission-summary">
-          <div class="mission-stat"><span>CONTINUITY</span><strong><span id="missionContinuity">100.00</span>%</strong><small>LATEST WINDOW</small></div>
+          <div class="mission-stat"><span>CURRENT CONTINUITY</span><strong><span id="missionContinuity">100.00</span>%</strong><small>LATEST WINDOW</small><span class="incident-low">INCIDENT LOW <b id="missionIncidentLow">—</b></span></div>
           <div class="mission-stat"><span>FRAMES RECEIVED</span><strong id="missionFramesReceived">1,000</strong><small>CUMULATIVE</small></div>
-          <div class="mission-stat"><span>FRAMES LOST</span><strong id="missionFramesLost">0</strong><small>CUMULATIVE</small></div>
-          <div class="mission-stat"><span>LAST INTERRUPTION</span><strong><span id="missionInterruption">0</span><em> ms</em></strong><small>SIMULATED</small></div>
+          <div class="mission-stat"><span>CUMULATIVE FRAMES LOST</span><strong id="missionFramesLost">0</strong><small>SINCE RESET</small></div>
+          <div class="mission-stat"><span>LAST FAILOVER INTERRUPTION</span><strong><span id="missionInterruption">0</span><em> ms</em></strong><small>SIMULATED</small></div>
         </div>
         <div class="mission-network-grid">
           <div class="mission-route-card">
             <p class="eyebrow">ACTIVE TELEMETRY ROUTE</p>
+            <div id="routeSwitch" class="route-switch" hidden></div>
             <div id="missionRoute" class="path-flow"></div>
             <div class="route-meta"><span>GROUND <b id="missionGround">GS-A</b></span><span>GATEWAY <b id="missionGateway">TEL-GW-01</b></span><span>MODE <b id="missionRouteMode">PRIMARY</b></span></div>
             <button class="secondary telemetry-button" id="transmitFramesButton">Transmit 120 Telemetry Frames</button>
           </div>
           <div class="failover-card">
-            <p class="eyebrow">FAILOVER EVIDENCE</p>
+            <p class="eyebrow" id="failoverEvidenceLabel">FAILOVER EVIDENCE</p>
             <strong id="failoverState">IDLE</strong>
             <p id="failoverRoute">No failover recorded.</p>
             <div class="timing-grid"><span>DETECTION<b id="failoverDetection">—</b></span><span>ROUTE TRANSITION<b id="failoverTransition">—</b></span><span>TOTAL INTERRUPTION<b id="failoverTotal">—</b></span></div>
@@ -82,10 +84,10 @@
       <article class="panel fault-panel"><div class="panel-title"><div><p class="eyebrow">SYSTEMS CORE</p><h3>Direct Fault Injection</h3></div><span class="armed">LAB MODE</span></div><p class="panel-copy">Generic faults remain available to exercise the core independently of a domain scenario.</p><div class="fault-grid"><button data-fault="latency"><span>01</span><b>Latency</b><small>860 ms response time</small></button><button data-fault="packet_loss"><span>02</span><b>Packet Loss</b><small>18.4% communications loss</small></button><button data-fault="cpu_spike"><span>03</span><b>Compute Spike</b><small>98.7% CPU saturation</small></button><button data-fault="service_down"><span>04</span><b>Service Down</b><small>Critical service unavailable</small></button></div><div class="control-row"><label class="toggle"><input id="autoRecovery" type="checkbox" checked><span></span> Automatic recovery</label><button class="secondary" id="recoverButton">Manual Recover</button><button class="secondary" id="resetButton">Reset Environment</button></div></article>
     </section>
 
-    <section class="flow-panel contract-flow"><div class="flow-node"><span>01</span><b>INJECT</b><small>Known failure</small></div><i></i><div class="flow-node"><span>02</span><b>DETECT</b><small>Threshold</small></div><i></i><div class="flow-node"><span>03</span><b>DIAGNOSE</b><small>Dependencies</small></div><i></i><div class="flow-node"><span>04</span><b>ISOLATE</b><small>Fault domain</small></div><i></i><div class="flow-node"><span>05</span><b>RECOVER</b><small>Action</small></div><i></i><div class="flow-node"><span>06</span><b>VALIDATE</b><small>Health + flow</small></div><i></i><div class="flow-node"><span>07</span><b>EVIDENCE</b><small>MTTR + events</small></div></section>
+    <section class="flow-panel contract-flow"><div class="flow-node" data-contract-step="1" data-stage-state="PENDING"><span>01</span><b>INJECT</b><small>Known failure</small></div><i></i><div class="flow-node" data-contract-step="2" data-stage-state="PENDING"><span>02</span><b>DETECT</b><small>Threshold</small></div><i></i><div class="flow-node" data-contract-step="3" data-stage-state="PENDING"><span>03</span><b>DIAGNOSE</b><small>Dependencies</small></div><i></i><div class="flow-node" data-contract-step="4" data-stage-state="PENDING"><span>04</span><b>ISOLATE</b><small>Fault domain</small></div><i></i><div class="flow-node" data-contract-step="5" data-stage-state="PENDING"><span>05</span><b>RECOVER</b><small>Action</small></div><i></i><div class="flow-node" data-contract-step="6" data-stage-state="PENDING"><span>06</span><b>VALIDATE</b><small>Health + flow</small></div><i></i><div class="flow-node" data-contract-step="7" data-stage-state="PENDING"><span>07</span><b>EVIDENCE</b><small>MTTR + events</small></div></section>
 
     <footer><span>Independent engineering portfolio project · Not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries.</span><strong>Built by Alexander Taylor · Lordkoii</strong></footer>
   </main>
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/v05-polish.js"></script>
 </body>
 </html>

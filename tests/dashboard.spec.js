@@ -12,10 +12,11 @@ test('dashboard exposes operational state, mission network, and dependency model
   await expect(page.getByText('MISSION NETWORK MODEL / TELEMETRY CONTINUITY', { exact: true })).toBeVisible();
   await expect(page.getByText('OPERATIONAL STATE MODEL', { exact: true })).toBeVisible();
   await expect(page.getByText('DEPENDENCY / FLOW MODEL', { exact: true })).toBeVisible();
-  await expect(page.locator('#missionReadiness')).toHaveText('READY');
+  await expect(page.locator('#missionReadiness')).toHaveText('MISSION READY');
   await expect(page.locator('[data-system-id="GS-A"]')).toContainText('PRIMARY');
   await expect(page.locator('[data-system-id="GS-B"]')).toContainText('STANDBY');
   await expect(page.locator('[data-system-id="TEL-GW-02"]')).toContainText('STANDBY');
+  await expect(page.locator('[data-contract-step="1"]')).toHaveAttribute('data-stage-state', 'PENDING');
 });
 
 test('mission telemetry frame control advances received frames', async ({ page }) => {
@@ -44,20 +45,30 @@ test('factory tools expose lifecycle controls', async ({ page }) => {
   await expect(page.locator('[data-system-id="LITH-01"]')).toContainText('SETUP');
 });
 
-test('mission ground-link scenario updates active route and failover evidence', async ({ page }) => {
+test('mission ground-link scenario exposes degraded failover story and pending validation', async ({ page, request }) => {
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
   await page.getByRole('button', { name: /Ground Link Degradation/ }).click();
   await expect(page.locator('#systemStatus')).toHaveText(/DEGRADED|INCIDENT/, { timeout: 2500 });
   await expect(page.locator('#impactHeadline')).toContainText(/ground/i, { timeout: 3000 });
   await expect(page.locator('[data-system-id="GS-B"]')).toContainText(/FAILOVER|PRIMARY/, { timeout: 3500 });
   await expect(page.locator('#missionGround')).toHaveText('GS-B', { timeout: 3500 });
   await expect(page.locator('#failoverRoute')).toContainText('GS-A → GS-B', { timeout: 3500 });
+  await expect(page.locator('#missionReadiness')).toHaveText('MISSION DEGRADED', { timeout: 3500 });
+  await expect(page.locator('#missionIncidentLow')).toHaveText('80.00%', { timeout: 3500 });
+  await expect(page.locator('#routeSwitch')).toContainText('GS-A', { timeout: 3500 });
+  await expect(page.locator('#routeSwitch')).toContainText('GS-B', { timeout: 3500 });
+  await expect(page.locator('[data-check-id="post-failover-validation"]')).toHaveAttribute('data-status', 'WARN');
+  await expect(page.locator('#readinessScore')).not.toHaveText('100');
+  await expect(page.locator('#impactLevel')).toHaveText('DEGRADED');
+  await expect(page.locator('[data-contract-step="5"]')).toHaveAttribute('data-stage-state', 'ACTIVE');
 });
 
 test('mission network partition drives dashboard to NO-GO readiness', async ({ page, request }) => {
   await request.post('/api/auto-recovery', { data: { enabled: false } });
   await page.getByRole('button', { name: /Mission Network Partition/ }).click();
-  await expect(page.locator('#missionReadiness')).toHaveText('NO-GO', { timeout: 3500 });
+  await expect(page.locator('#missionReadiness')).toHaveText('MISSION NO-GO', { timeout: 3500 });
   await expect(page.locator('[data-system-id="TRACK-01"]')).toContainText('BLOCKED', { timeout: 3500 });
   await expect(page.locator('[data-system-id="CMD-01"]')).toContainText('BLOCKED', { timeout: 3500 });
   await expect(page.locator('[data-check-id="network-fabric"]')).toHaveAttribute('data-status', 'FAIL');
+  await expect(page.locator('#routeSwitch')).toContainText('NO ALTERNATE ROUTE');
 });
