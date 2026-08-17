@@ -4,21 +4,22 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Orbital Reliability Lab</title>
-  <meta name="description" content="A systems reliability, automation, production, and operations engineering lab for high-consequence factory and mission environments." />
+  <meta name="description" content="A systems reliability, automation, production, network, and operations engineering lab for high-consequence factory and mission environments." />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/v03.css" />
   <link rel="stylesheet" href="/v04.css" />
+  <link rel="stylesheet" href="/v05.css" />
 </head>
 <body>
   <div class="stars"></div>
   <main class="shell">
     <header class="topbar">
       <div class="brand"><div class="mark" aria-hidden="true"><span></span><span></span><span></span></div><div><p class="eyebrow">HIGH-CONSEQUENCE SYSTEMS / RELIABILITY ENGINEERING</p><h1>Orbital Reliability Lab</h1></div></div>
-      <div class="clock-block"><span>LAB UPTIME · v0.4.0 FACTORY PRODUCTION MODEL</span><strong id="uptime">T+ 00:00:00</strong></div>
+      <div class="clock-block"><span>LAB UPTIME · v0.5.0 MISSION NETWORK MODEL</span><strong id="uptime">T+ 00:00:00</strong></div>
     </header>
 
     <section class="workspace-grid">
-      <article class="panel"><div class="panel-title"><div><p class="eyebrow">SIMULATION ENVIRONMENT</p><h3>Operational Domain</h3></div><span class="armed">DUAL DOMAIN</span></div><p class="panel-copy">One reliability core, two operational models, domain-specific dependencies and failure effects.</p><div class="fault-grid"><button data-environment="mission"><span>01</span><b>Mission Operations</b><small>Ground systems · telemetry · command · redundancy</small></button><button data-environment="factory"><span>02</span><b>Factory Operations</b><small>Equipment · material flow · MES · production execution</small></button></div></article>
+      <article class="panel"><div class="panel-title"><div><p class="eyebrow">SIMULATION ENVIRONMENT</p><h3>Operational Domain</h3></div><span class="armed">DUAL DOMAIN</span></div><p class="panel-copy">One reliability core, two operational models, domain-specific dependencies and failure effects.</p><div class="fault-grid"><button data-environment="mission"><span>01</span><b>Mission Operations</b><small>Ground systems · telemetry · command · network redundancy</small></button><button data-environment="factory"><span>02</span><b>Factory Operations</b><small>Equipment · material flow · MES · production execution</small></button></div></article>
       <article class="panel"><div class="panel-title"><div><p class="eyebrow">SCENARIO LIBRARY</p><h3>Operational Failure Scenarios</h3></div><span class="armed">RUNBOOK MODE</span></div><p class="panel-copy" id="scenarioDescription">Run a failure through the shared response contract.</p><div class="fault-grid" id="scenarioList"></div></article>
     </section>
 
@@ -29,6 +30,35 @@
       <article class="metric-card"><div class="metric-head"><span>PACKET LOSS</span><small id="packetContext">GROUND LINK</small></div><strong><span id="packetLoss">0.1</span><em>%</em></strong><div class="meter"><i id="packetBar"></i></div><p>Target &lt; 1.0%</p></article>
       <article class="metric-card"><div class="metric-head"><span>COMPUTE</span><small id="cpuContext">MISSION SERVICES</small></div><strong><span id="cpu">31</span><em>%</em></strong><div class="meter"><i id="cpuBar"></i></div><p>Target &lt; 85%</p></article>
       <article class="metric-card"><div class="metric-head"><span>THROUGHPUT</span><small id="throughputContext">EVENT STREAM</small></div><strong><span id="throughput">1,260</span><em>rps</em></strong><div class="meter"><i id="throughputBar"></i></div><p>Nominal 1.1k–1.45k rps</p></article>
+    </section>
+
+    <section class="mission-network-section" id="missionNetworkSection">
+      <article class="panel mission-network-panel">
+        <div class="panel-title"><div><p class="eyebrow">MISSION NETWORK MODEL / TELEMETRY CONTINUITY</p><h3>Ground, Gateway & Dependency Routing</h3></div><span class="readiness-badge" id="missionReadiness" data-state="READY">READY</span></div>
+        <p class="panel-copy">Deterministic telemetry frames move through redundant ground and gateway routes. Failures expose continuity loss, failover timing, dependency impact, and mission readiness.</p>
+        <div class="mission-summary">
+          <div class="mission-stat"><span>CONTINUITY</span><strong><span id="missionContinuity">100.00</span>%</strong><small>LATEST WINDOW</small></div>
+          <div class="mission-stat"><span>FRAMES RECEIVED</span><strong id="missionFramesReceived">1,000</strong><small>CUMULATIVE</small></div>
+          <div class="mission-stat"><span>FRAMES LOST</span><strong id="missionFramesLost">0</strong><small>CUMULATIVE</small></div>
+          <div class="mission-stat"><span>LAST INTERRUPTION</span><strong><span id="missionInterruption">0</span><em> ms</em></strong><small>SIMULATED</small></div>
+        </div>
+        <div class="mission-network-grid">
+          <div class="mission-route-card">
+            <p class="eyebrow">ACTIVE TELEMETRY ROUTE</p>
+            <div id="missionRoute" class="path-flow"></div>
+            <div class="route-meta"><span>GROUND <b id="missionGround">GS-A</b></span><span>GATEWAY <b id="missionGateway">TEL-GW-01</b></span><span>MODE <b id="missionRouteMode">PRIMARY</b></span></div>
+            <button class="secondary telemetry-button" id="transmitFramesButton">Transmit 120 Telemetry Frames</button>
+          </div>
+          <div class="failover-card">
+            <p class="eyebrow">FAILOVER EVIDENCE</p>
+            <strong id="failoverState">IDLE</strong>
+            <p id="failoverRoute">No failover recorded.</p>
+            <div class="timing-grid"><span>DETECTION<b id="failoverDetection">—</b></span><span>ROUTE TRANSITION<b id="failoverTransition">—</b></span><span>TOTAL INTERRUPTION<b id="failoverTotal">—</b></span></div>
+            <small id="networkValidation">Primary mission telemetry path validated.</small>
+          </div>
+        </div>
+        <div class="readiness-panel"><div><p class="eyebrow">MISSION READINESS CHECKS</p><strong><span id="readinessScore">100</span>/100</strong></div><div id="readinessChecks" class="readiness-checks"></div></div>
+      </article>
     </section>
 
     <section class="production-section" id="productionSection" hidden>

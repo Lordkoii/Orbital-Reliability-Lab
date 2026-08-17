@@ -2,12 +2,17 @@ export const SCENARIOS = [
   {
     id: 'mission-ground-link-degradation', environment: 'mission', name: 'Ground Link Degradation',
     summary: 'Primary ground link develops severe packet loss and telemetry delay.', faultType: 'packet_loss', target: 'GS-A',
-    response: 'Detect link degradation, fail over to the redundant station, then validate telemetry continuity.'
+    response: 'Detect link degradation, fail over to the redundant station, measure interruption, then validate telemetry continuity.'
   },
   {
     id: 'mission-telemetry-gateway-outage', environment: 'mission', name: 'Telemetry Gateway Outage',
     summary: 'The primary telemetry gateway becomes unavailable during operations.', faultType: 'service_down', target: 'TEL-GW-01',
-    response: 'Detect service loss, expose downstream impact, restore the gateway, and validate event flow.'
+    response: 'Detect service loss, move telemetry to the redundant gateway, measure interruption, and validate event flow.'
+  },
+  {
+    id: 'mission-network-partition', environment: 'mission', name: 'Mission Network Partition',
+    summary: 'The mission network fabric partitions telemetry, tracking, and command dependencies.', faultType: 'service_down', target: 'NET-CORE-01',
+    response: 'Detect the partition, expose NO-GO readiness, restore the network fabric, and validate dependency continuity.'
   },
   {
     id: 'mission-compute-saturation', environment: 'mission', name: 'Mission Compute Saturation',

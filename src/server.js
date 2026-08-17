@@ -20,13 +20,22 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && pathname === '/api/health') {
     const snapshot = engine.getSnapshot();
-    return sendJson(res, snapshot.status === 'INCIDENT' ? 503 : 200, { ok: snapshot.status !== 'INCIDENT', status: snapshot.status, environment: snapshot.environment.id, impact: snapshot.operationalImpact.level, productionHold: snapshot.production?.metrics.heldLots || 0, updatedAt: snapshot.updatedAt });
+    return sendJson(res, snapshot.status === 'INCIDENT' ? 503 : 200, {
+      ok: snapshot.status !== 'INCIDENT',
+      status: snapshot.status,
+      environment: snapshot.environment.id,
+      impact: snapshot.operationalImpact.level,
+      productionHold: snapshot.production?.metrics.heldLots || 0,
+      missionReadiness: snapshot.missionNetwork?.readiness.state || null,
+      updatedAt: snapshot.updatedAt
+    });
   }
   if (req.method === 'GET' && pathname === '/api/telemetry') return sendJson(res, 200, engine.getSnapshot());
   if (req.method === 'GET' && pathname === '/api/environments') return sendJson(res, 200, { environments: engine.listEnvironments() });
   if (req.method === 'GET' && pathname === '/api/scenarios') return sendJson(res, 200, { scenarios: engine.getScenarios() });
   if (req.method === 'GET' && pathname === '/api/events') return sendJson(res, 200, { events: engine.events });
   if (req.method === 'GET' && pathname === '/api/production') return sendJson(res, 200, { production: engine.getSnapshot().production });
+  if (req.method === 'GET' && pathname === '/api/mission/network') return sendJson(res, 200, { missionNetwork: engine.getSnapshot().missionNetwork });
   if (req.method === 'GET' && pathname === '/api/metrics') {
     const snapshot = engine.getSnapshot();
     const stateMap = { NOMINAL: 0, DEGRADED: 1, INCIDENT: 2, RECOVERING: 3 };
@@ -43,6 +52,18 @@ const server = http.createServer(async (req, res) => {
       '# HELP orbital_last_mttr_seconds Most recent mean time to recovery sample', '# TYPE orbital_last_mttr_seconds gauge', `orbital_last_mttr_seconds ${snapshot.lastMttrMs ? (snapshot.lastMttrMs / 1000).toFixed(3) : 0}`
     ];
     for (const system of snapshot.systems) lines.push(`orbital_asset_health{environment="${snapshot.environment.id}",asset="${system.id}",state="${system.state}",health="${system.health}"} ${system.health === 'NOMINAL' ? 1 : 0}`);
+    if (snapshot.missionNetwork) {
+      const network = snapshot.missionNetwork;
+      const readinessMap = { 'NO-GO': 0, DEGRADED: 1, READY: 2 };
+      lines.push(
+        '# HELP orbital_mission_frames_received_total Mission telemetry frames received', '# TYPE orbital_mission_frames_received_total counter', `orbital_mission_frames_received_total ${network.frames.received}`,
+        '# HELP orbital_mission_frames_lost_total Mission telemetry frames lost', '# TYPE orbital_mission_frames_lost_total counter', `orbital_mission_frames_lost_total ${network.frames.lost}`,
+        '# HELP orbital_mission_telemetry_continuity_percent Latest mission telemetry continuity percentage', '# TYPE orbital_mission_telemetry_continuity_percent gauge', `orbital_mission_telemetry_continuity_percent ${network.frames.lastWindow.continuityPct.toFixed(3)}`,
+        '# HELP orbital_mission_failover_interruption_ms Most recent simulated mission route interruption', '# TYPE orbital_mission_failover_interruption_ms gauge', `orbital_mission_failover_interruption_ms ${network.failover.totalInterruptionMs || 0}`,
+        '# HELP orbital_mission_readiness_score Mission readiness check score from 0 to 100', '# TYPE orbital_mission_readiness_score gauge', `orbital_mission_readiness_score ${network.readiness.score}`,
+        '# HELP orbital_mission_readiness_info Mission readiness state', '# TYPE orbital_mission_readiness_info gauge', `orbital_mission_readiness_info{state="${network.readiness.state}"} ${readinessMap[network.readiness.state] ?? -1}`
+      );
+    }
     if (snapshot.production) {
       lines.push('# HELP orbital_factory_wip_lots Factory lots not yet completed', '# TYPE orbital_factory_wip_lots gauge', `orbital_factory_wip_lots ${snapshot.production.metrics.wipLots}`,
         '# HELP orbital_factory_held_lots Factory lots held by operational protection', '# TYPE orbital_factory_held_lots gauge', `orbital_factory_held_lots ${snapshot.production.metrics.heldLots}`,
@@ -55,6 +76,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && pathname === '/api/environment') { const body = await readJson(req); const result = engine.setEnvironment(body.id); return sendJson(res, result.ok ? 200 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/scenarios/run') { const body = await readJson(req); const result = engine.runScenario(body.id); return sendJson(res, result.ok ? 202 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/systems/advance') { const body = await readJson(req); const result = engine.advanceSystem(body.id); return sendJson(res, result.ok ? 200 : 409, result); }
+  if (req.method === 'POST' && pathname === '/api/mission/frames') { const body = await readJson(req); const result = engine.advanceMissionFrames(body.count || 120); return sendJson(res, result.ok ? 200 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/production/lots') { const body = await readJson(req); const result = engine.createLot(body); return sendJson(res, result.ok ? 201 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/production/advance') { const body = await readJson(req); const result = engine.advanceLot(body.id); return sendJson(res, result.ok ? 200 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/faults') { const body = await readJson(req); const result = engine.injectFault(body.type, { target: body.target || null }); return sendJson(res, result.ok ? 202 : 409, result); }

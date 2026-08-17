@@ -4,45 +4,56 @@ import { ReliabilityEngine } from '../src/reliability-engine.js';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-test('starts mission operations with primary and standby ground paths', () => {
+test('starts mission operations with redundant network topology and READY readiness', () => {
   const engine = new ReliabilityEngine();
   const snapshot = engine.getSnapshot();
   assert.equal(snapshot.status, 'NOMINAL');
   assert.equal(snapshot.environment.id, 'mission');
   assert.equal(snapshot.systems.find(s => s.id === 'GS-A').state, 'PRIMARY');
   assert.equal(snapshot.systems.find(s => s.id === 'GS-B').state, 'STANDBY');
-  assert.deepEqual(snapshot.activePath, ['GS-A', 'TEL-GW-01', 'MDB-01']);
+  assert.equal(snapshot.systems.find(s => s.id === 'TEL-GW-02').state, 'STANDBY');
+  assert.equal(snapshot.systems.find(s => s.id === 'NET-CORE-01').state, 'READY');
+  assert.deepEqual(snapshot.activePath, ['GS-A', 'TEL-GW-01', 'NET-CORE-01', 'MDB-01']);
+  assert.equal(snapshot.missionNetwork.readiness.state, 'READY');
 });
 
-test('ground-link failure creates dependency-aware failover and recovers', async () => {
+test('ground-link failure creates measured failover and recovers', async () => {
   const engine = new ReliabilityEngine();
   const injected = engine.runScenario('mission-ground-link-degradation');
   assert.equal(injected.ok, true);
   assert.equal(injected.snapshot.systems.find(s => s.id === 'GS-A').health, 'DEGRADED');
-  assert.equal(injected.snapshot.systems.find(s => s.id === 'TEL-GW-01').health, 'WARNING');
+  assert.equal(injected.snapshot.missionNetwork.frames.lastWindow.continuityPct, 80);
 
   await sleep(900);
   const incident = engine.getSnapshot();
   assert.equal(incident.status, 'INCIDENT');
   assert.equal(incident.systems.find(s => s.id === 'GS-A').state, 'FAULT');
   assert.equal(incident.systems.find(s => s.id === 'GS-B').state, 'FAILOVER');
-  assert.equal(incident.systems.find(s => s.id === 'TEL-GW-01').state, 'FAILOVER');
-  assert.equal(incident.operationalImpact.level, 'CRITICAL');
+  assert.equal(incident.missionNetwork.route.groundStation, 'GS-B');
+  assert.equal(incident.missionNetwork.failover.type, 'GROUND');
+  assert.ok(incident.missionNetwork.failover.totalInterruptionMs > 0);
 
   await sleep(2500);
   const recovering = engine.getSnapshot();
   assert.ok(['RECOVERING', 'NOMINAL'].includes(recovering.status));
-  if (recovering.status === 'RECOVERING') {
-    assert.equal(recovering.systems.find(s => s.id === 'GS-B').state, 'PRIMARY');
-    assert.equal(recovering.activePath[0], 'GS-B');
-  }
 
   await sleep(1000);
   const final = engine.getSnapshot();
   assert.equal(final.status, 'NOMINAL');
   assert.equal(final.systems.find(s => s.id === 'GS-A').state, 'PRIMARY');
   assert.equal(final.systems.find(s => s.id === 'GS-B').state, 'STANDBY');
+  assert.equal(final.missionNetwork.validation.state, 'PASS');
+  assert.equal(final.missionNetwork.readiness.state, 'READY');
   assert.ok(final.lastMttrMs > 0);
+});
+
+test('mission frame control advances deterministic telemetry counters', () => {
+  const engine = new ReliabilityEngine();
+  const before = engine.getSnapshot().missionNetwork.frames.received;
+  const result = engine.advanceMissionFrames(120);
+  assert.equal(result.ok, true);
+  assert.equal(result.missionNetwork.frames.received - before, 120);
+  assert.equal(result.missionNetwork.frames.lastWindow.continuityPct, 100);
 });
 
 test('MES outage holds tracked factory equipment', async () => {

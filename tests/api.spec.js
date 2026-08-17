@@ -6,12 +6,27 @@ test.beforeEach(async ({ request }) => {
   await request.post('/api/auto-recovery', { data: { enabled: true } });
 });
 
-test('mission topology exposes primary and standby ground paths', async ({ request }) => {
+test('mission topology exposes redundant ground and telemetry routes', async ({ request }) => {
   const body = await (await request.get('/api/telemetry')).json();
   expect(body.environment.id).toBe('mission');
   expect(body.systems.find(s => s.id === 'GS-A').state).toBe('PRIMARY');
   expect(body.systems.find(s => s.id === 'GS-B').state).toBe('STANDBY');
-  expect(body.activePath[0]).toBe('GS-A');
+  expect(body.systems.find(s => s.id === 'TEL-GW-02').state).toBe('STANDBY');
+  expect(body.systems.find(s => s.id === 'NET-CORE-01').state).toBe('READY');
+  expect(body.activePath).toEqual(['GS-A', 'TEL-GW-01', 'NET-CORE-01', 'MDB-01']);
+  expect(body.missionNetwork.readiness.state).toBe('READY');
+});
+
+test('mission network API exposes readiness and advances telemetry frames', async ({ request }) => {
+  const initial = await (await request.get('/api/mission/network')).json();
+  expect(initial.missionNetwork.readiness.state).toBe('READY');
+  expect(initial.missionNetwork.frames.lastWindow.continuityPct).toBe(100);
+  const before = initial.missionNetwork.frames.received;
+  const advanced = await request.post('/api/mission/frames', { data: { count: 120 } });
+  expect(advanced.ok()).toBeTruthy();
+  const body = await advanced.json();
+  expect(body.missionNetwork.frames.received - before).toBe(120);
+  expect(body.missionNetwork.frames.lastWindow.continuityPct).toBe(100);
 });
 
 test('mission ground-link scenario creates failover state and recovers', async ({ request }) => {
@@ -20,8 +35,44 @@ test('mission ground-link scenario creates failover state and recovers', async (
   await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('INCIDENT');
   const incident = await (await request.get('/api/telemetry')).json();
   expect(incident.systems.find(s => s.id === 'GS-B').state).toBe('FAILOVER');
-  expect(incident.operationalImpact.level).toBe('CRITICAL');
+  expect(incident.missionNetwork.route.groundStation).toBe('GS-B');
+  expect(incident.missionNetwork.failover.to).toBe('GS-B');
+  expect(incident.missionNetwork.failover.totalInterruptionMs).toBeGreaterThan(0);
   await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 6500 }).toBe('NOMINAL');
+  const final = await (await request.get('/api/telemetry')).json();
+  expect(final.missionNetwork.validation.state).toBe('PASS');
+  expect(final.missionNetwork.readiness.state).toBe('READY');
+});
+
+test('primary telemetry gateway outage moves route to TEL-GW-02', async ({ request }) => {
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+  const injected = await request.post('/api/scenarios/run', { data: { id: 'mission-telemetry-gateway-outage' } });
+  expect(injected.status()).toBe(202);
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('INCIDENT');
+  const incident = await (await request.get('/api/telemetry')).json();
+  expect(incident.missionNetwork.route.telemetryGateway).toBe('TEL-GW-02');
+  expect(incident.missionNetwork.failover.to).toBe('TEL-GW-02');
+  expect(incident.systems.find(s => s.id === 'TEL-GW-02').state).toBe('FAILOVER');
+  await request.post('/api/recover');
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('NOMINAL');
+});
+
+test('mission network partition drives NO-GO readiness and restores after validation', async ({ request }) => {
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+  const injected = await request.post('/api/scenarios/run', { data: { id: 'mission-network-partition' } });
+  expect(injected.status()).toBe(202);
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('INCIDENT');
+  let body = await (await request.get('/api/telemetry')).json();
+  expect(body.missionNetwork.partition.active).toBe(true);
+  expect(body.missionNetwork.readiness.state).toBe('NO-GO');
+  expect(body.systems.find(s => s.id === 'TRACK-01').state).toBe('BLOCKED');
+  expect(body.systems.find(s => s.id === 'CMD-01').state).toBe('BLOCKED');
+  await request.post('/api/recover');
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('NOMINAL');
+  body = await (await request.get('/api/telemetry')).json();
+  expect(body.missionNetwork.partition.active).toBe(false);
+  expect(body.missionNetwork.validation.state).toBe('PASS');
+  expect(body.missionNetwork.readiness.state).toBe('READY');
 });
 
 test('factory lifecycle endpoint advances equipment state', async ({ request }) => {
