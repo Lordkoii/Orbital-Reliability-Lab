@@ -3,10 +3,12 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ReliabilityEngine } from './reliability-engine.js';
+import { IndustrialCommunicationsModel } from './industrial-communications-model.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
 const engine = new ReliabilityEngine();
+const industrialCommunications = new IndustrialCommunicationsModel();
 const port = Number(process.env.PORT || 3000);
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml' };
 
@@ -20,6 +22,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && pathname === '/api/health') {
     const snapshot = engine.getSnapshot();
+    const factoryComms = snapshot.environment.id === 'factory' ? industrialCommunications.snapshot() : null;
     return sendJson(res, snapshot.status === 'INCIDENT' ? 503 : 200, {
       ok: snapshot.status !== 'INCIDENT',
       status: snapshot.status,
@@ -27,6 +30,12 @@ const server = http.createServer(async (req, res) => {
       impact: snapshot.operationalImpact.level,
       productionHold: snapshot.production?.metrics.heldLots || 0,
       missionReadiness: snapshot.missionNetwork?.readiness.state || null,
+      industrialCommunications: factoryComms ? {
+        mqtt: factoryComms.broker.state,
+        connectedEndpoints: factoryComms.metrics.connectedEndpoints,
+        totalEndpoints: factoryComms.metrics.totalEndpoints,
+        opcUa: factoryComms.opcUa.state
+      } : null,
       updatedAt: snapshot.updatedAt
     });
   }
@@ -36,6 +45,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/api/events') return sendJson(res, 200, { events: engine.events });
   if (req.method === 'GET' && pathname === '/api/production') return sendJson(res, 200, { production: engine.getSnapshot().production });
   if (req.method === 'GET' && pathname === '/api/mission/network') return sendJson(res, 200, { missionNetwork: engine.getSnapshot().missionNetwork });
+  if (req.method === 'GET' && pathname === '/api/factory/communications') {
+    const snapshot = engine.getSnapshot();
+    if (snapshot.environment.id !== 'factory') return sendJson(res, 409, { error: 'Industrial communications are only available in Factory Operations' });
+    return sendJson(res, 200, { industrialCommunications: industrialCommunications.snapshot() });
+  }
   if (req.method === 'GET' && pathname === '/api/metrics') {
     const snapshot = engine.getSnapshot();
     const stateMap = { NOMINAL: 0, DEGRADED: 1, INCIDENT: 2, RECOVERING: 3 };
@@ -65,24 +79,57 @@ const server = http.createServer(async (req, res) => {
       );
     }
     if (snapshot.production) {
+      const comms = industrialCommunications.snapshot();
       lines.push('# HELP orbital_factory_wip_lots Factory lots not yet completed', '# TYPE orbital_factory_wip_lots gauge', `orbital_factory_wip_lots ${snapshot.production.metrics.wipLots}`,
         '# HELP orbital_factory_held_lots Factory lots held by operational protection', '# TYPE orbital_factory_held_lots gauge', `orbital_factory_held_lots ${snapshot.production.metrics.heldLots}`,
         '# HELP orbital_factory_wafers_wip Wafers currently in WIP', '# TYPE orbital_factory_wafers_wip gauge', `orbital_factory_wafers_wip ${snapshot.production.metrics.wafersInWip}`,
-        '# HELP orbital_factory_completed_lots Completed production lots', '# TYPE orbital_factory_completed_lots counter', `orbital_factory_completed_lots ${snapshot.production.metrics.completedLots}`);
+        '# HELP orbital_factory_completed_lots Completed production lots', '# TYPE orbital_factory_completed_lots counter', `orbital_factory_completed_lots ${snapshot.production.metrics.completedLots}`,
+        '# HELP orbital_factory_mqtt_connected_endpoints Connected simulated MQTT equipment endpoints', '# TYPE orbital_factory_mqtt_connected_endpoints gauge', `orbital_factory_mqtt_connected_endpoints ${comms.metrics.connectedEndpoints}`,
+        '# HELP orbital_factory_mqtt_messages_published_total Simulated MQTT messages published', '# TYPE orbital_factory_mqtt_messages_published_total counter', `orbital_factory_mqtt_messages_published_total ${comms.metrics.messagesPublished}`,
+        '# HELP orbital_factory_mqtt_messages_dropped_total Simulated MQTT messages dropped', '# TYPE orbital_factory_mqtt_messages_dropped_total counter', `orbital_factory_mqtt_messages_dropped_total ${comms.metrics.messagesDropped}`);
     }
     res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(`${lines.join('\n')}\n`);
   }
 
-  if (req.method === 'POST' && pathname === '/api/environment') { const body = await readJson(req); const result = engine.setEnvironment(body.id); return sendJson(res, result.ok ? 200 : 409, result); }
+  if (req.method === 'POST' && pathname === '/api/environment') {
+    const body = await readJson(req);
+    const result = engine.setEnvironment(body.id);
+    if (result.ok) industrialCommunications.reset();
+    return sendJson(res, result.ok ? 200 : 409, result);
+  }
   if (req.method === 'POST' && pathname === '/api/scenarios/run') { const body = await readJson(req); const result = engine.runScenario(body.id); return sendJson(res, result.ok ? 202 : 409, result); }
-  if (req.method === 'POST' && pathname === '/api/systems/advance') { const body = await readJson(req); const result = engine.advanceSystem(body.id); return sendJson(res, result.ok ? 200 : 409, result); }
+  if (req.method === 'POST' && pathname === '/api/systems/advance') {
+    const body = await readJson(req);
+    const result = engine.advanceSystem(body.id);
+    if (result.ok && engine.getEnvironment().id === 'factory') industrialCommunications.publish(body.id, result.system);
+    return sendJson(res, result.ok ? 200 : 409, result);
+  }
   if (req.method === 'POST' && pathname === '/api/mission/frames') { const body = await readJson(req); const result = engine.advanceMissionFrames(body.count || 120); return sendJson(res, result.ok ? 200 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/production/lots') { const body = await readJson(req); const result = engine.createLot(body); return sendJson(res, result.ok ? 201 : 409, result); }
-  if (req.method === 'POST' && pathname === '/api/production/advance') { const body = await readJson(req); const result = engine.advanceLot(body.id); return sendJson(res, result.ok ? 200 : 409, result); }
+  if (req.method === 'POST' && pathname === '/api/production/advance') {
+    const body = await readJson(req);
+    const result = engine.advanceLot(body.id);
+    if (result.ok) {
+      const snapshot = engine.getSnapshot();
+      industrialCommunications.publishFactorySnapshot(snapshot.systems);
+    }
+    return sendJson(res, result.ok ? 200 : 409, result);
+  }
+  if (req.method === 'POST' && pathname === '/api/factory/communications/publish') {
+    const snapshot = engine.getSnapshot();
+    if (snapshot.environment.id !== 'factory') return sendJson(res, 409, { error: 'Industrial communications are only available in Factory Operations' });
+    const result = industrialCommunications.publishFactorySnapshot(snapshot.systems);
+    engine.pushEvent('MQTT', `${result.published} equipment telemetry messages published through ${result.snapshot.broker.id}`, 'success');
+    return sendJson(res, 200, result);
+  }
   if (req.method === 'POST' && pathname === '/api/faults') { const body = await readJson(req); const result = engine.injectFault(body.type, { target: body.target || null }); return sendJson(res, result.ok ? 202 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/recover') { const result = engine.recover('manual'); return sendJson(res, result.ok ? 202 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/auto-recovery') { const body = await readJson(req); return sendJson(res, 200, engine.setAutoRecovery(body.enabled)); }
-  if (req.method === 'POST' && pathname === '/api/reset') return sendJson(res, 200, engine.reset());
+  if (req.method === 'POST' && pathname === '/api/reset') {
+    const result = engine.reset();
+    industrialCommunications.reset();
+    return sendJson(res, 200, result);
+  }
 
   if (req.method === 'GET' && await serveStatic(res, pathname)) return;
   sendJson(res, 404, { error: 'Not found' });
