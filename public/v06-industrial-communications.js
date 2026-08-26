@@ -4,6 +4,14 @@ const style = document.createElement('style');
 style.textContent = `
   .industrial-comms-section { margin-top: 14px; }
   .industrial-comms-panel { min-height: 0; }
+  .comms-mode-badge {
+    border: 1px solid #3a4650;
+    color: #95a3ad;
+    padding: 7px 10px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 9px;
+    letter-spacing: .12em;
+  }
   .comms-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -32,7 +40,8 @@ style.textContent = `
   .comms-stat strong[data-state="DEGRADED"],
   .comms-stat strong[data-state="RECONNECTING"],
   .comms-stat strong[data-state="STANDBY"] { color: var(--amber); }
-  .comms-stat strong[data-state="OFFLINE"] { color: var(--red); }
+  .comms-stat strong[data-state="OFFLINE"],
+  .comms-stat strong[data-state="SESSION_LOST"] { color: var(--red); }
   .comms-stat strong[data-alert="true"] { color: var(--red); }
   .comms-layout {
     display: grid;
@@ -44,7 +53,8 @@ style.textContent = `
     background: #0c1217;
     padding: 15px;
   }
-  .protocol-card[data-state="OFFLINE"] { border-color: #74383c; background: rgba(67, 20, 24, .18); }
+  .protocol-card[data-state="OFFLINE"],
+  .protocol-card[data-state="SESSION_LOST"] { border-color: #74383c; background: rgba(67, 20, 24, .18); }
   .protocol-card[data-state="RECONNECTING"] { border-color: #725c2d; background: rgba(64, 49, 18, .16); }
   .protocol-card + .protocol-card { margin-top: 10px; }
   .protocol-head {
@@ -70,6 +80,7 @@ style.textContent = `
     color: var(--amber);
   }
   .protocol-head span[data-state="OFFLINE"],
+  .protocol-head span[data-state="SESSION_LOST"],
   .protocol-head span[data-state="FAIL"] {
     border-color: #74383c;
     color: var(--red);
@@ -98,9 +109,9 @@ style.textContent = `
     font-size: 11px;
     font-weight: 500;
   }
-  .protocol-meta b[data-state="PASS"] { color: var(--green); }
-  .protocol-meta b[data-state="RUNNING"], .protocol-meta b[data-state="PENDING"] { color: var(--amber); }
-  .protocol-meta b[data-state="FAIL"] { color: var(--red); }
+  .protocol-meta b[data-state="PASS"], .protocol-meta b[data-state="ACTIVE"] { color: var(--green); }
+  .protocol-meta b[data-state="RUNNING"], .protocol-meta b[data-state="PENDING"], .protocol-meta b[data-state="NEGOTIATING"] { color: var(--amber); }
+  .protocol-meta b[data-state="FAIL"], .protocol-meta b[data-state="LOST"] { color: var(--red); }
   .comms-validation-detail {
     margin-top: 9px !important;
     padding-top: 9px;
@@ -108,7 +119,17 @@ style.textContent = `
     color: #8194a1 !important;
     font-size: 11px !important;
   }
-  .comms-publish-button { margin-top: 13px; width: 100%; }
+  .opcua-paths {
+    display: grid;
+    gap: 5px;
+    margin: 10px 0 2px;
+    padding: 8px 9px;
+    border: 1px solid #24313a;
+    background: rgba(7, 12, 16, .45);
+  }
+  .opcua-paths span { color: #718594; font-size: 9px; }
+  .opcua-paths code { display: block; margin-top: 2px; color: #9aabb6; font-size: 9px; overflow-wrap: anywhere; }
+  .comms-publish-button, .opcua-read-button { margin-top: 13px; width: 100%; }
   .endpoint-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -169,9 +190,9 @@ section.innerHTML = `
         <p class="eyebrow">FACTORY INDUSTRIAL COMMUNICATIONS / v0.6</p>
         <h3>Equipment Messaging & Protocol Health</h3>
       </div>
-      <span class="live"><i></i> SIMULATED</span>
+      <span class="comms-mode-badge">SIMULATION MODE</span>
     </div>
-    <p class="panel-copy">Factory assets publish deterministic state and health evidence through an ORL MQTT topology. Broker faults disconnect equipment messaging, protect active production, and require reconnect validation before normal operations resume.</p>
+    <p class="panel-copy">Factory assets expose deterministic communications evidence through simulated MQTT messaging and an OPC-UA metrology adapter. Protocol faults protect production until reconnect and readback validation pass.</p>
     <div class="comms-summary">
       <div class="comms-stat"><span>MQTT BROKER</span><strong id="mqttBrokerState">—</strong></div>
       <div class="comms-stat"><span>CONNECTED ENDPOINTS</span><strong id="mqttConnected">—</strong></div>
@@ -191,14 +212,23 @@ section.innerHTML = `
           <p class="comms-validation-detail" id="mqttValidationDetail">Broker online; all registered equipment endpoints connected.</p>
           <button class="secondary comms-publish-button" id="publishFactorySnapshotButton">Publish Equipment Snapshot</button>
         </div>
-        <div class="protocol-card opcua-card">
-          <div class="protocol-head"><strong id="opcUaId">ORL-OPCUA-01</strong><span id="opcUaState">STANDBY</span></div>
-          <p id="opcUaNote">Reserved for the next v0.6 increment.</p>
-          <div class="protocol-meta">
-            <span>IMPLEMENTATION<b id="opcUaImplementation">—</b></span>
-            <span>SESSIONS<b id="opcUaSessions">0</b></span>
-            <span>ROLE<b>SECONDARY</b></span>
+        <div class="protocol-card opcua-card" id="opcUaProtocolCard">
+          <div class="protocol-head"><strong id="opcUaId">ORL-OPCUA-01</strong><span id="opcUaState">ONLINE</span></div>
+          <p id="opcUaNote">Simulated OPC-UA session monitoring metrology state and health.</p>
+          <div class="opcua-paths">
+            <span>ENDPOINT<code id="opcUaEndpoint">—</code></span>
+            <span>MONITORED NODE<code id="opcUaNode">—</code></span>
           </div>
+          <div class="protocol-meta">
+            <span>SESSION<b id="opcUaSessionState">—</b></span>
+            <span>SESSIONS<b id="opcUaSessions">0</b></span>
+            <span>VALIDATION<b id="opcUaValidation">—</b></span>
+            <span>GOOD READS<b id="opcUaReads">0</b></span>
+            <span>STALE READS<b id="opcUaStaleReads">0</b></span>
+            <span>LAST STATUS<b id="opcUaLastStatus">NO READ</b></span>
+          </div>
+          <p class="comms-validation-detail" id="opcUaValidationDetail">Adapter online; monitored metrology node is readable.</p>
+          <button class="secondary opcua-read-button" id="readOpcUaButton">Read Metrology Node</button>
         </div>
       </div>
       <div class="endpoint-grid" id="industrialEndpointGrid"></div>
@@ -236,13 +266,32 @@ function render(data) {
   byId('mqttValidation').textContent = validation.state;
   byId('mqttValidation').dataset.state = validation.state;
   byId('mqttValidationDetail').textContent = validation.detail;
+
+  const mqttButton = byId('publishFactorySnapshotButton');
+  mqttButton.textContent = broker.state === 'OFFLINE' ? 'Attempt Equipment Publish' : broker.state === 'RECONNECTING' ? 'Reconnect In Progress' : 'Publish Equipment Snapshot';
+  mqttButton.disabled = broker.state === 'RECONNECTING';
+
   byId('opcUaId').textContent = opcUa.id;
   byId('opcUaState').textContent = opcUa.state;
   byId('opcUaState').dataset.state = opcUa.state;
-  byId('opcUaImplementation').textContent = opcUa.implementation.replaceAll('_', ' ');
-  byId('opcUaSessions').textContent = String(opcUa.sessions);
+  byId('opcUaProtocolCard').dataset.state = opcUa.state;
   byId('opcUaNote').textContent = opcUa.note;
-  byId('publishFactorySnapshotButton').disabled = broker.state !== 'ONLINE';
+  byId('opcUaEndpoint').textContent = opcUa.endpointUrl;
+  byId('opcUaNode').textContent = opcUa.monitoredNode;
+  byId('opcUaSessionState').textContent = opcUa.sessionState;
+  byId('opcUaSessionState').dataset.state = opcUa.sessionState;
+  byId('opcUaSessions').textContent = String(opcUa.sessions);
+  byId('opcUaValidation').textContent = opcUa.validation.state;
+  byId('opcUaValidation').dataset.state = opcUa.validation.state;
+  byId('opcUaReads').textContent = String(opcUa.reads);
+  byId('opcUaStaleReads').textContent = String(opcUa.staleReads);
+  byId('opcUaLastStatus').textContent = opcUa.lastValue?.statusCode || 'NO READ';
+  byId('opcUaLastStatus').dataset.state = opcUa.lastValue?.statusCode === 'Good' ? 'PASS' : opcUa.lastValue ? 'FAIL' : '';
+  byId('opcUaValidationDetail').textContent = opcUa.validation.detail;
+  const opcUaButton = byId('readOpcUaButton');
+  opcUaButton.textContent = opcUa.state === 'SESSION_LOST' ? 'Attempt Stale Node Read' : opcUa.state === 'RECONNECTING' ? 'Session Reconnecting' : 'Read Metrology Node';
+  opcUaButton.disabled = opcUa.state === 'RECONNECTING';
+
   byId('industrialEndpointGrid').innerHTML = model.endpoints.map((endpoint) => `
     <article class="endpoint-card" data-endpoint-id="${endpoint.assetId}" data-connected="${endpoint.connected}">
       <div class="endpoint-top"><strong>${endpoint.assetId}</strong><span>${endpoint.connected ? 'CONNECTED' : 'DISCONNECTED'}</span></div>
@@ -274,7 +323,19 @@ byId('publishFactorySnapshotButton')?.addEventListener('click', async () => {
     await refreshIndustrialCommunications();
   } finally {
     const state = byId('mqttBrokerState')?.textContent;
-    button.disabled = state !== 'ONLINE';
+    button.disabled = state === 'RECONNECTING';
+  }
+});
+
+byId('readOpcUaButton')?.addEventListener('click', async () => {
+  const button = byId('readOpcUaButton');
+  button.disabled = true;
+  try {
+    await fetch('/api/factory/communications/opcua/read', { method: 'POST' });
+    await refreshIndustrialCommunications();
+  } finally {
+    const state = byId('opcUaState')?.textContent;
+    button.disabled = state === 'RECONNECTING';
   }
 });
 
