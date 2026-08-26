@@ -113,3 +113,27 @@ test('MES outage holds WIP and validated recovery releases it', async ({ request
   expect(body.production.metrics.heldLots).toBe(0);
   expect(body.production.lots[0].status).toBe('RUNNING');
 });
+
+test('factory communications API exposes MQTT topology and publishes equipment snapshots', async ({ request }) => {
+  await request.post('/api/environment', { data: { id: 'factory' } });
+  const initialResponse = await request.get('/api/factory/communications');
+  expect(initialResponse.ok()).toBeTruthy();
+  const initial = await initialResponse.json();
+  expect(initial.industrialCommunications.broker.id).toBe('ORL-MQTT-01');
+  expect(initial.industrialCommunications.broker.state).toBe('ONLINE');
+  expect(initial.industrialCommunications.metrics.connectedEndpoints).toBe(6);
+  expect(initial.industrialCommunications.metrics.messagesPublished).toBe(0);
+  expect(initial.industrialCommunications.opcUa.state).toBe('STANDBY');
+
+  const publishedResponse = await request.post('/api/factory/communications/publish');
+  expect(publishedResponse.ok()).toBeTruthy();
+  const published = await publishedResponse.json();
+  expect(published.published).toBe(6);
+  expect(published.snapshot.metrics.messagesPublished).toBe(6);
+  expect(published.snapshot.endpoints.find(endpoint => endpoint.assetId === 'LITH-01').lastSequence).toBeGreaterThan(0);
+});
+
+test('factory communications endpoint is rejected outside Factory Operations', async ({ request }) => {
+  const response = await request.get('/api/factory/communications');
+  expect(response.status()).toBe(409);
+});
