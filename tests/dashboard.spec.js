@@ -52,12 +52,38 @@ test('factory dashboard exposes MQTT communications evidence and publishes equip
   await expect(page.getByText('FACTORY INDUSTRIAL COMMUNICATIONS / v0.6', { exact: true })).toBeVisible();
   await expect(page.locator('#mqttBrokerState')).toHaveText('ONLINE');
   await expect(page.locator('#mqttConnected')).toHaveText('6/6');
+  await expect(page.locator('#mqttValidation')).toHaveText('PASS');
   await expect(page.locator('#opcUaState')).toHaveText('STANDBY');
   await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText('CONNECTED');
   await expect(page.locator('#mqttPublished')).toHaveText('0');
   await page.getByRole('button', { name: 'Publish Equipment Snapshot' }).click();
   await expect(page.locator('#mqttPublished')).toHaveText('6');
   await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText(/SEQ\s+1/);
+});
+
+test('factory MQTT outage shows disconnected endpoints, held production, reconnect, and validation', async ({ page, request }) => {
+  await page.getByRole('button', { name: /Factory Operations/ }).click();
+  const lot = page.locator('[data-lot-id="LOT-DEMO-001"]');
+  await lot.getByRole('button', { name: 'START OPERATION' }).click();
+  await page.getByRole('button', { name: 'Publish Equipment Snapshot' }).click();
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+
+  await page.getByRole('button', { name: /MQTT Broker Outage/ }).click();
+  await expect(page.locator('#mqttBrokerState')).toHaveText('OFFLINE', { timeout: 2500 });
+  await expect(page.locator('#mqttConnected')).toHaveText('0/6', { timeout: 2500 });
+  await expect(page.locator('#mqttValidation')).toHaveText('PENDING', { timeout: 2500 });
+  await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText('DISCONNECTED', { timeout: 2500 });
+  await expect(page.locator('#mqttDropped')).toHaveText('6', { timeout: 3500 });
+  await expect(page.locator('#heldLots')).toHaveText('1', { timeout: 3500 });
+  await expect(page.locator('#impactHeadline')).toContainText(/communications outage/i, { timeout: 3500 });
+
+  await page.getByRole('button', { name: 'Manual Recover' }).click();
+  await expect(page.locator('#mqttBrokerState')).toHaveText(/RECONNECTING|ONLINE/, { timeout: 2000 });
+  await expect.poll(async () => page.locator('#mqttBrokerState').innerText(), { timeout: 3000 }).toBe('ONLINE');
+  await expect(page.locator('#mqttConnected')).toHaveText('6/6');
+  await expect(page.locator('#mqttValidation')).toHaveText('PASS');
+  await expect(page.locator('#heldLots')).toHaveText('0');
+  await expect(page.locator('#systemStatus')).toHaveText('NOMINAL');
 });
 
 test('mission ground-link scenario exposes degraded failover story and pending validation', async ({ page, request }) => {
