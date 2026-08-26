@@ -30,8 +30,10 @@ style.textContent = `
   }
   .comms-stat strong[data-state="ONLINE"] { color: var(--green); }
   .comms-stat strong[data-state="DEGRADED"],
+  .comms-stat strong[data-state="RECONNECTING"],
   .comms-stat strong[data-state="STANDBY"] { color: var(--amber); }
   .comms-stat strong[data-state="OFFLINE"] { color: var(--red); }
+  .comms-stat strong[data-alert="true"] { color: var(--red); }
   .comms-layout {
     display: grid;
     grid-template-columns: .9fr 1.1fr;
@@ -42,6 +44,8 @@ style.textContent = `
     background: #0c1217;
     padding: 15px;
   }
+  .protocol-card[data-state="OFFLINE"] { border-color: #74383c; background: rgba(67, 20, 24, .18); }
+  .protocol-card[data-state="RECONNECTING"] { border-color: #725c2d; background: rgba(64, 49, 18, .16); }
   .protocol-card + .protocol-card { margin-top: 10px; }
   .protocol-head {
     display: flex;
@@ -58,9 +62,17 @@ style.textContent = `
     font-size: 9px;
     letter-spacing: .08em;
   }
-  .protocol-head span[data-state="STANDBY"] {
+  .protocol-head span[data-state="STANDBY"],
+  .protocol-head span[data-state="RECONNECTING"],
+  .protocol-head span[data-state="RUNNING"],
+  .protocol-head span[data-state="PENDING"] {
     border-color: #725c2d;
     color: var(--amber);
+  }
+  .protocol-head span[data-state="OFFLINE"],
+  .protocol-head span[data-state="FAIL"] {
+    border-color: #74383c;
+    color: var(--red);
   }
   .protocol-card p {
     color: #91a3af;
@@ -70,7 +82,7 @@ style.textContent = `
   }
   .protocol-meta {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     margin-top: 12px;
   }
@@ -86,6 +98,16 @@ style.textContent = `
     font-size: 11px;
     font-weight: 500;
   }
+  .protocol-meta b[data-state="PASS"] { color: var(--green); }
+  .protocol-meta b[data-state="RUNNING"], .protocol-meta b[data-state="PENDING"] { color: var(--amber); }
+  .protocol-meta b[data-state="FAIL"] { color: var(--red); }
+  .comms-validation-detail {
+    margin-top: 9px !important;
+    padding-top: 9px;
+    border-top: 1px solid #24313a;
+    color: #8194a1 !important;
+    font-size: 11px !important;
+  }
   .comms-publish-button { margin-top: 13px; width: 100%; }
   .endpoint-grid {
     display: grid;
@@ -96,8 +118,9 @@ style.textContent = `
     border: 1px solid #273640;
     background: rgba(10, 16, 21, .72);
     padding: 12px;
+    transition: border-color .2s ease, background .2s ease;
   }
-  .endpoint-card[data-connected="false"] { border-color: #74383c; }
+  .endpoint-card[data-connected="false"] { border-color: #74383c; background: rgba(67, 20, 24, .16); }
   .endpoint-top { display: flex; justify-content: space-between; gap: 10px; }
   .endpoint-top strong { font-size: 12px; }
   .endpoint-top span {
@@ -123,12 +146,14 @@ style.textContent = `
     font-size: 9px;
   }
   .endpoint-meta b { color: #aebdc7; font-weight: 500; }
+  .endpoint-meta b[data-alert="true"] { color: var(--red); }
   @media(max-width:900px) {
     .comms-summary { grid-template-columns: 1fr 1fr; }
     .comms-layout { grid-template-columns: 1fr; }
+    .protocol-meta { grid-template-columns: 1fr 1fr; }
   }
   @media(max-width:600px) {
-    .comms-summary, .endpoint-grid { grid-template-columns: 1fr; }
+    .comms-summary, .endpoint-grid, .protocol-meta { grid-template-columns: 1fr; }
   }
 `;
 document.head.append(style);
@@ -146,7 +171,7 @@ section.innerHTML = `
       </div>
       <span class="live"><i></i> SIMULATED</span>
     </div>
-    <p class="panel-copy">Factory assets publish deterministic state and health evidence through an ORL MQTT topology. OPC-UA adapter state is reserved for the next communications increment.</p>
+    <p class="panel-copy">Factory assets publish deterministic state and health evidence through an ORL MQTT topology. Broker faults disconnect equipment messaging, protect active production, and require reconnect validation before normal operations resume.</p>
     <div class="comms-summary">
       <div class="comms-stat"><span>MQTT BROKER</span><strong id="mqttBrokerState">—</strong></div>
       <div class="comms-stat"><span>CONNECTED ENDPOINTS</span><strong id="mqttConnected">—</strong></div>
@@ -155,21 +180,24 @@ section.innerHTML = `
     </div>
     <div class="comms-layout">
       <div>
-        <div class="protocol-card">
+        <div class="protocol-card" id="mqttProtocolCard">
           <div class="protocol-head"><strong id="mqttBrokerId">ORL-MQTT-01</strong><span id="mqttBrokerBadge">ONLINE</span></div>
           <p>In-memory MQTT simulation for factory equipment telemetry, state, and health topics.</p>
           <div class="protocol-meta">
             <span>IMPLEMENTATION<b id="mqttImplementation">—</b></span>
             <span>LAST MESSAGE<b id="mqttLastMessage">—</b></span>
+            <span>VALIDATION<b id="mqttValidation">—</b></span>
           </div>
+          <p class="comms-validation-detail" id="mqttValidationDetail">Broker online; all registered equipment endpoints connected.</p>
           <button class="secondary comms-publish-button" id="publishFactorySnapshotButton">Publish Equipment Snapshot</button>
         </div>
-        <div class="protocol-card">
+        <div class="protocol-card opcua-card">
           <div class="protocol-head"><strong id="opcUaId">ORL-OPCUA-01</strong><span id="opcUaState">STANDBY</span></div>
           <p id="opcUaNote">Reserved for the next v0.6 increment.</p>
           <div class="protocol-meta">
             <span>IMPLEMENTATION<b id="opcUaImplementation">—</b></span>
             <span>SESSIONS<b id="opcUaSessions">0</b></span>
+            <span>ROLE<b>SECONDARY</b></span>
           </div>
         </div>
       </div>
@@ -192,27 +220,34 @@ function render(data) {
   if (!model) return;
   const broker = model.broker;
   const opcUa = model.opcUa;
+  const validation = model.validation;
   byId('mqttBrokerState').textContent = broker.state;
   byId('mqttBrokerState').dataset.state = broker.state;
   byId('mqttConnected').textContent = `${model.metrics.connectedEndpoints}/${model.metrics.totalEndpoints}`;
   byId('mqttPublished').textContent = model.metrics.messagesPublished.toLocaleString();
   byId('mqttDropped').textContent = model.metrics.messagesDropped.toLocaleString();
+  byId('mqttDropped').dataset.alert = String(model.metrics.messagesDropped > 0 && model.outage.active);
   byId('mqttBrokerId').textContent = broker.id;
   byId('mqttBrokerBadge').textContent = broker.state;
   byId('mqttBrokerBadge').dataset.state = broker.state;
+  byId('mqttProtocolCard').dataset.state = broker.state;
   byId('mqttImplementation').textContent = broker.implementation.replaceAll('_', ' ');
   byId('mqttLastMessage').textContent = timeLabel(broker.lastMessageAt);
+  byId('mqttValidation').textContent = validation.state;
+  byId('mqttValidation').dataset.state = validation.state;
+  byId('mqttValidationDetail').textContent = validation.detail;
   byId('opcUaId').textContent = opcUa.id;
   byId('opcUaState').textContent = opcUa.state;
   byId('opcUaState').dataset.state = opcUa.state;
   byId('opcUaImplementation').textContent = opcUa.implementation.replaceAll('_', ' ');
   byId('opcUaSessions').textContent = String(opcUa.sessions);
   byId('opcUaNote').textContent = opcUa.note;
+  byId('publishFactorySnapshotButton').disabled = broker.state !== 'ONLINE';
   byId('industrialEndpointGrid').innerHTML = model.endpoints.map((endpoint) => `
     <article class="endpoint-card" data-endpoint-id="${endpoint.assetId}" data-connected="${endpoint.connected}">
       <div class="endpoint-top"><strong>${endpoint.assetId}</strong><span>${endpoint.connected ? 'CONNECTED' : 'DISCONNECTED'}</span></div>
       <div class="endpoint-topic">${endpoint.topics.telemetry}</div>
-      <div class="endpoint-meta"><span>QoS <b>${endpoint.qos}</b></span><span>SEQ <b>${endpoint.lastSequence || '—'}</b></span><span>MSG <b>${endpoint.messagesPublished}</b></span></div>
+      <div class="endpoint-meta"><span>QoS <b>${endpoint.qos}</b></span><span>SEQ <b>${endpoint.lastSequence || '—'}</b></span><span>MSG <b>${endpoint.messagesPublished}</b></span><span>DROP <b data-alert="${endpoint.messagesDropped > 0 && model.outage.active}">${endpoint.messagesDropped}</b></span></div>
     </article>
   `).join('');
 }
@@ -238,9 +273,10 @@ byId('publishFactorySnapshotButton')?.addEventListener('click', async () => {
     await fetch('/api/factory/communications/publish', { method: 'POST' });
     await refreshIndustrialCommunications();
   } finally {
-    button.disabled = false;
+    const state = byId('mqttBrokerState')?.textContent;
+    button.disabled = state !== 'ONLINE';
   }
 });
 
 await refreshIndustrialCommunications();
-setInterval(refreshIndustrialCommunications, 700);
+setInterval(refreshIndustrialCommunications, 500);
