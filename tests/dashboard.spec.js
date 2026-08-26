@@ -45,6 +45,87 @@ test('factory tools expose lifecycle controls', async ({ page }) => {
   await expect(page.locator('[data-system-id="LITH-01"]')).toContainText('SETUP');
 });
 
+test('factory dashboard exposes MQTT and OPC-UA communications evidence', async ({ page }) => {
+  await page.getByRole('button', { name: /Factory Operations/ }).click();
+  const section = page.locator('#industrialCommunicationsSection');
+  await expect(section).toBeVisible();
+  await expect(page.getByText('FACTORY INDUSTRIAL COMMUNICATIONS / v0.6', { exact: true })).toBeVisible();
+  await expect(page.getByText('SIMULATION MODE', { exact: true })).toBeVisible();
+  await expect(page.locator('#mqttBrokerState')).toHaveText('ONLINE');
+  await expect(page.locator('#mqttConnected')).toHaveText('6/6');
+  await expect(page.locator('#mqttValidation')).toHaveText('PASS');
+  await expect(page.locator('#opcUaState')).toHaveText('ONLINE');
+  await expect(page.locator('#opcUaSessionState')).toHaveText('ACTIVE');
+  await expect(page.locator('#opcUaSessions')).toHaveText('1');
+  await expect(page.locator('#opcUaValidation')).toHaveText('PASS');
+  await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText('CONNECTED');
+  await expect(page.locator('#mqttPublished')).toHaveText('0');
+
+  await page.getByRole('button', { name: 'Publish Equipment Snapshot' }).click();
+  await expect(page.locator('#mqttPublished')).toHaveText('6');
+  await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText(/SEQ\s+1/);
+
+  await page.getByRole('button', { name: 'Read Metrology Node' }).click();
+  await expect(page.locator('#opcUaReads')).toHaveText('1');
+  await expect(page.locator('#opcUaLastStatus')).toHaveText('Good');
+});
+
+test('factory MQTT outage shows disconnected endpoints, held production, reconnect, and validation', async ({ page, request }) => {
+  await page.getByRole('button', { name: /Factory Operations/ }).click();
+  const lot = page.locator('[data-lot-id="LOT-DEMO-001"]');
+  await lot.getByRole('button', { name: 'START OPERATION' }).click();
+  await page.getByRole('button', { name: 'Publish Equipment Snapshot' }).click();
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+
+  await page.getByRole('button', { name: /MQTT Broker Outage/ }).click();
+  await expect(page.locator('#mqttBrokerState')).toHaveText('OFFLINE', { timeout: 2500 });
+  await expect(page.locator('#mqttConnected')).toHaveText('0/6', { timeout: 2500 });
+  await expect(page.locator('#mqttValidation')).toHaveText('PENDING', { timeout: 2500 });
+  await expect(page.getByRole('button', { name: 'Attempt Equipment Publish' })).toBeEnabled();
+  await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText('DISCONNECTED', { timeout: 2500 });
+  await expect(page.locator('#mqttDropped')).toHaveText('6', { timeout: 3500 });
+  await expect(page.locator('#heldLots')).toHaveText('1', { timeout: 3500 });
+  await expect(page.locator('#impactHeadline')).toContainText(/communications outage/i, { timeout: 3500 });
+
+  await page.getByRole('button', { name: 'Manual Recover' }).click();
+  await expect(page.locator('#mqttBrokerState')).toHaveText(/RECONNECTING|ONLINE/, { timeout: 2000 });
+  await expect.poll(async () => page.locator('#mqttBrokerState').innerText(), { timeout: 4500 }).toBe('ONLINE');
+  await expect(page.locator('#mqttConnected')).toHaveText('6/6');
+  await expect(page.locator('#mqttValidation')).toHaveText('PASS');
+  await expect(page.locator('#heldLots')).toHaveText('0');
+  await expect(page.locator('#systemStatus')).toHaveText('NOMINAL');
+});
+
+test('factory OPC-UA session loss shows stale node evidence and validated reconnect', async ({ page, request }) => {
+  await page.getByRole('button', { name: /Factory Operations/ }).click();
+  const lot = page.locator('[data-lot-id="LOT-DEMO-001"]');
+  await lot.getByRole('button', { name: 'START OPERATION' }).click();
+  await page.getByRole('button', { name: 'Read Metrology Node' }).click();
+  await expect(page.locator('#opcUaLastStatus')).toHaveText('Good');
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+
+  await page.getByRole('button', { name: /OPC-UA Session Loss/ }).click();
+  await expect(page.locator('#opcUaState')).toHaveText('SESSION_LOST', { timeout: 2500 });
+  await expect(page.locator('#opcUaSessionState')).toHaveText('LOST', { timeout: 2500 });
+  await expect(page.locator('#opcUaSessions')).toHaveText('0', { timeout: 2500 });
+  await expect(page.locator('#opcUaValidation')).toHaveText('PENDING', { timeout: 2500 });
+  await expect(page.getByRole('button', { name: 'Attempt Stale Node Read' })).toBeEnabled();
+  await expect(page.locator('#opcUaStaleReads')).toHaveText('1', { timeout: 3500 });
+  await expect(page.locator('#opcUaLastStatus')).toHaveText('BadSessionClosed', { timeout: 3500 });
+  await expect(page.locator('#heldLots')).toHaveText('1', { timeout: 3500 });
+  await expect(page.locator('#impactHeadline')).toContainText(/Metrology session unavailable/i, { timeout: 3500 });
+
+  await page.getByRole('button', { name: 'Manual Recover' }).click();
+  await expect(page.locator('#opcUaState')).toHaveText(/RECONNECTING|ONLINE/, { timeout: 2000 });
+  await expect.poll(async () => page.locator('#opcUaState').innerText(), { timeout: 4500 }).toBe('ONLINE');
+  await expect(page.locator('#opcUaSessionState')).toHaveText('ACTIVE');
+  await expect(page.locator('#opcUaSessions')).toHaveText('1');
+  await expect(page.locator('#opcUaValidation')).toHaveText('PASS');
+  await expect(page.locator('#opcUaLastStatus')).toHaveText('Good');
+  await expect(page.locator('#heldLots')).toHaveText('0');
+  await expect(page.locator('#systemStatus')).toHaveText('NOMINAL');
+});
+
 test('mission ground-link scenario exposes degraded failover story and pending validation', async ({ page, request }) => {
   await request.post('/api/auto-recovery', { data: { enabled: false } });
   await page.getByRole('button', { name: /Ground Link Degradation/ }).click();

@@ -113,3 +113,83 @@ test('MES outage holds WIP and validated recovery releases it', async ({ request
   expect(body.production.metrics.heldLots).toBe(0);
   expect(body.production.lots[0].status).toBe('RUNNING');
 });
+
+test('factory communications API exposes MQTT and OPC-UA models and publishes equipment snapshots', async ({ request }) => {
+  await request.post('/api/environment', { data: { id: 'factory' } });
+  const initialResponse = await request.get('/api/factory/communications');
+  expect(initialResponse.ok()).toBeTruthy();
+  const initial = await initialResponse.json();
+  expect(initial.industrialCommunications.broker.id).toBe('ORL-MQTT-01');
+  expect(initial.industrialCommunications.broker.state).toBe('ONLINE');
+  expect(initial.industrialCommunications.metrics.connectedEndpoints).toBe(6);
+  expect(initial.industrialCommunications.metrics.messagesPublished).toBe(0);
+  expect(initial.industrialCommunications.opcUa.state).toBe('ONLINE');
+  expect(initial.industrialCommunications.opcUa.sessionState).toBe('ACTIVE');
+  expect(initial.industrialCommunications.opcUa.sessions).toBe(1);
+
+  const publishedResponse = await request.post('/api/factory/communications/publish');
+  expect(publishedResponse.ok()).toBeTruthy();
+  const published = await publishedResponse.json();
+  expect(published.published).toBe(6);
+  expect(published.snapshot.industrialCommunications.metrics.messagesPublished).toBe(6);
+
+  const readResponse = await request.post('/api/factory/communications/opcua/read');
+  expect(readResponse.ok()).toBeTruthy();
+  const read = await readResponse.json();
+  expect(read.value.statusCode).toBe('Good');
+  expect(read.value.assetId).toBe('MET-01');
+  expect(read.snapshot.industrialCommunications.opcUa.reads).toBe(1);
+});
+
+test('MQTT broker outage records dropped messages and validates reconnect', async ({ request }) => {
+  await request.post('/api/environment', { data: { id: 'factory' } });
+  const production = await (await request.get('/api/production')).json();
+  await request.post('/api/production/advance', { data: { id: production.production.lots[0].id } });
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+  await request.post('/api/scenarios/run', { data: { id: 'factory-mqtt-broker-outage' } });
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('INCIDENT');
+  let body = await (await request.get('/api/telemetry')).json();
+  expect(body.industrialCommunications.broker.state).toBe('OFFLINE');
+  expect(body.industrialCommunications.metrics.connectedEndpoints).toBe(0);
+  expect(body.industrialCommunications.metrics.messagesDropped).toBe(6);
+  expect(body.production.lots[0].status).toBe('HOLD');
+  await request.post('/api/recover');
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 3500 }).toBe('NOMINAL');
+  body = await (await request.get('/api/telemetry')).json();
+  expect(body.industrialCommunications.broker.state).toBe('ONLINE');
+  expect(body.industrialCommunications.validation.state).toBe('PASS');
+  expect(body.production.lots[0].status).toBe('RUNNING');
+});
+
+test('OPC-UA session loss exposes stale read evidence and validates session recovery', async ({ request }) => {
+  await request.post('/api/environment', { data: { id: 'factory' } });
+  const production = await (await request.get('/api/production')).json();
+  await request.post('/api/production/advance', { data: { id: production.production.lots[0].id } });
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+  await request.post('/api/factory/communications/opcua/read');
+  const injected = await request.post('/api/scenarios/run', { data: { id: 'factory-opcua-session-loss' } });
+  expect(injected.status()).toBe(202);
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('INCIDENT');
+  let body = await (await request.get('/api/telemetry')).json();
+  expect(body.industrialCommunications.opcUa.state).toBe('SESSION_LOST');
+  expect(body.industrialCommunications.opcUa.sessionState).toBe('LOST');
+  expect(body.industrialCommunications.opcUa.staleReads).toBe(1);
+  expect(body.industrialCommunications.opcUa.lastValue.statusCode).toBe('BadSessionClosed');
+  expect(body.industrialCommunications.opcUa.validation.state).toBe('PENDING');
+  expect(body.production.lots[0].status).toBe('HOLD');
+  await request.post('/api/recover');
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 3500 }).toBe('NOMINAL');
+  body = await (await request.get('/api/telemetry')).json();
+  expect(body.industrialCommunications.opcUa.state).toBe('ONLINE');
+  expect(body.industrialCommunications.opcUa.sessionState).toBe('ACTIVE');
+  expect(body.industrialCommunications.opcUa.sessions).toBe(1);
+  expect(body.industrialCommunications.opcUa.reconnectCount).toBe(1);
+  expect(body.industrialCommunications.opcUa.validation.state).toBe('PASS');
+  expect(body.industrialCommunications.opcUa.lastValue.statusCode).toBe('Good');
+  expect(body.production.lots[0].status).toBe('RUNNING');
+});
+
+test('factory communications endpoint is rejected outside Factory Operations', async ({ request }) => {
+  const response = await request.get('/api/factory/communications');
+  expect(response.status()).toBe(409);
+});

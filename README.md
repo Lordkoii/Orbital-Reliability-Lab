@@ -8,45 +8,36 @@
 
 ORL models two operational domains on one shared reliability core:
 
-- **Mission Operations** — ground systems, telemetry, command, tracking, network redundancy, continuity, and failover
-- **Factory Operations** — equipment lifecycles, material flow, MES dependencies, lot/wafer execution, and production-state protection
+- **Mission Operations** — ground systems, telemetry, command, tracking, network redundancy, continuity, failover, and readiness
+- **Factory Operations** — equipment lifecycles, material flow, MES dependencies, lot/wafer execution, MQTT equipment messaging, and OPC-UA session health
 
 ORL is an independent engineering portfolio project. It is **not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries**, and it does not reproduce proprietary systems or processes.
 
-## v0.5 — Mission Network Model
+## v0.6.0 — Industrial Communications
 
-v0.5 expands Mission Operations from simple primary/standby state transitions into a deterministic network and telemetry-continuity model.
+v0.6 adds two distinct deterministic industrial-communications reliability paths to Factory Operations while preserving the v0.5 Mission Network Model.
 
-Mission Operations now includes:
+### MQTT equipment messaging
 
-- redundant ground routes: `GS-A` / `GS-B`
-- redundant telemetry gateways: `TEL-GW-01` / `TEL-GW-02`
-- a mission network fabric: `NET-CORE-01`
-- tracking and command dependency propagation
-- telemetry frame and sequence accounting
-- received/lost frame counts and continuity percentage
-- deterministic ground-link degradation and complete interruption windows
-- measured detection, route-transition, and total interruption evidence
-- network-partition behavior
-- mission readiness checks with `READY`, `DEGRADED`, and `NO-GO` states
-- post-recovery continuity validation
-- mission-specific APIs, Prometheus-style metrics, and dashboard evidence
+The simulated `ORL-MQTT-01` broker models equipment state/telemetry/health topics for:
 
-Nominal telemetry path:
+`LITH-01 · ETCH-01 · DEP-01 · MET-01 · AMHS-01 · MES-01`
 
-`GS-A → TEL-GW-01 → NET-CORE-01 → MDB-01`
+Evidence includes QoS, message sequence, successful publishes, dropped messages, endpoint connection state, reconnect count, last message, and validation state.
 
-Ground-link failover example:
+MQTT outage example:
 
-`GS-A DEGRADED → DETECT → GS-B PRIMARY → RECOVER → VALIDATE → GS-A PRIMARY`
+`ONLINE → OFFLINE → 0/6 ENDPOINTS → WIP HOLD → RECONNECTING → REPUBLISH → VALIDATION PASS → ONLINE`
 
-Telemetry-gateway failover example:
+### OPC-UA metrology session
 
-`TEL-GW-01 UNAVAILABLE → DETECT → TEL-GW-02 ACTIVE → RECOVER → VALIDATE → TEL-GW-01 ACTIVE`
+The simulated `ORL-OPCUA-01` adapter monitors a modeled `MET-01` state node and records session state, active sessions, Good reads, stale reads, last status, reconnect count, and validation evidence.
 
-Network partition example:
+OPC-UA session-loss example:
 
-`NET-CORE-01 PARTITIONED → TRACK-01 BLOCKED + CMD-01 BLOCKED → MISSION NO-GO`
+`ONLINE / ACTIVE → SESSION_LOST / LOST → BadSessionClosed → QUALITY HOLD → RECONNECTING / NEGOTIATING → Good READBACK → PASS`
+
+The MQTT broker and OPC-UA adapter are intentionally deterministic in-memory simulations. ORL does **not** claim a real broker, PLC, industrial controller, OPC-UA server, or factory integration.
 
 The shared response contract remains:
 
@@ -54,73 +45,111 @@ The shared response contract remains:
 
 ## Mission Operations
 
-Mission readiness evaluates six simulated checks:
+Mission Operations includes:
 
-1. active ground path availability
-2. active telemetry gateway availability
-3. mission network fabric health
-4. tracking dependency health
-5. command dependency health
-6. latest telemetry continuity ≥ 99%
+- redundant ground routes: `GS-A` / `GS-B`
+- redundant telemetry gateways: `TEL-GW-01` / `TEL-GW-02`
+- mission network fabric: `NET-CORE-01`
+- tracking and command dependency propagation
+- deterministic telemetry frame / sequence accounting
+- received/lost frame counts and continuity percentage
+- measured detection, route-transition, and interruption evidence
+- network partition behavior
+- `READY`, `DEGRADED`, and `NO-GO` readiness states
+- post-recovery continuity validation
 
-The model records frame continuity and failover evidence separately from the generic system metrics so a route can be restored while still requiring validation.
+Nominal telemetry path:
+
+`GS-A → TEL-GW-01 → NET-CORE-01 → MDB-01`
+
+Ground-link failover example:
+
+`GS-A DEGRADED → DETECT → GS-B FAILOVER → RECOVER → VALIDATE → MISSION READY`
 
 ## Factory Operations
 
-The v0.4 mini-MES and production model remain active in Factory Operations.
+The mini-MES model tracks a simplified semiconductor-style production flow.
 
-Process equipment implements a simplified lifecycle:
+Equipment lifecycle:
 
 `IDLE → SETUP → RUNNING → COMPLETE → IDLE`
 
-A production lot follows:
+Production route:
 
 `LITHOGRAPHY → ETCH → DEPOSITION → METROLOGY → COMPLETE`
 
-Shared-system failures produce operational consequences:
+Reliability events can protect production through HOLD/STARVED/quality-release behavior, with release only after the relevant recovery validation completes.
 
+Examples:
+
+- **MQTT Broker Outage** → all equipment messaging disconnects, publish attempts drop, active WIP is held, endpoints reconnect, telemetry is republished, and communications must validate
+- **OPC-UA Session Loss** → metrology session is lost, stale read evidence is recorded, quality-sensitive WIP is protected, session reconnects, node readback must return `Good`
 - **MES outage** → process equipment and WIP lots enter `HOLD`
-- **AMHS saturation** → process equipment becomes `STARVED`; production is protected
-- **Metrology link loss** → quality release is held for affected metrology flow
+- **AMHS saturation** → process equipment becomes `STARVED`
+- **Metrology link loss** → affected quality flow is held
 
 ## What the project demonstrates
 
 - state-machine design
 - dependency-aware failure propagation
 - redundant network and service-route modeling
-- deterministic telemetry frame accounting
+- deterministic telemetry/frame accounting
 - continuity and failover measurement
 - mission readiness evaluation
 - simplified MES / production execution concepts
 - lot, wafer, recipe, and process-route tracking
+- simulated MQTT equipment messaging and reconnect validation
+- simulated OPC-UA session monitoring and node readback validation
 - controlled fault injection
 - threshold-based incident detection
 - automated/manual recovery
 - post-recovery validation and reconciliation
 - operational impact modeling
-- MTTR and incident evidence
-- Prometheus-style system, mission-network, and factory-production metrics
+- MTTR and retained incident evidence
+- Prometheus-style mission, factory, MQTT, and OPC-UA metrics
 - Node + Playwright test automation
 - GitHub Actions CI
 - Dockerized execution
 
 ## Run locally
 
+Requires Node.js 20+.
+
 ```bash
+npm install
 npm start
 ```
 
 Open `http://localhost:3000`.
 
+For development:
+
+```bash
+npm run dev
+```
+
 ## Tests
 
 ```bash
 npm test
-
-npm install
 npx playwright install chromium
 npm run test:e2e
 ```
+
+Additional suites:
+
+```bash
+npm run test:api
+npm run test:ui
+```
+
+For the smoke check, start ORL in one terminal and run this in a second terminal:
+
+```bash
+npm run smoke
+```
+
+The smoke check uses `http://127.0.0.1:3000` unless `BASE_URL` is supplied.
 
 ## API
 
@@ -137,9 +166,12 @@ npm run test:e2e
 | `GET` | `/api/production` | Read mini-MES recipe, lot, WIP, and history state |
 | `POST` | `/api/production/lots` | Create a factory production lot |
 | `POST` | `/api/production/advance` | Start/complete the next lot operation |
-| `GET` | `/api/events` | Incident, network, MES, and recovery evidence stream |
-| `GET` | `/api/metrics` | Prometheus-style global, asset, mission, and production metrics |
-| `GET` | `/api/health` | Health endpoint including active-domain readiness context |
+| `GET` | `/api/factory/communications` | Read MQTT and OPC-UA communications state/evidence |
+| `POST` | `/api/factory/communications/publish` | Publish/attempt a factory equipment MQTT snapshot |
+| `POST` | `/api/factory/communications/opcua/read` | Perform/attempt the simulated metrology node read |
+| `GET` | `/api/events` | Incident, network, MES, protocol, and recovery evidence stream |
+| `GET` | `/api/metrics` | Prometheus-style global, mission, production, MQTT, and OPC-UA metrics |
+| `GET` | `/api/health` | Health endpoint including active-domain readiness/communications context |
 | `POST` | `/api/faults` | Inject a generic infrastructure fault |
 | `POST` | `/api/recover` | Trigger manual recovery |
 | `POST` | `/api/auto-recovery` | Arm/disarm automatic recovery |
@@ -155,32 +187,32 @@ flowchart LR
     ReliabilityEngine --> OperationalModel
     ReliabilityEngine --> MissionNetworkModel
     ReliabilityEngine --> ProductionModel
-    ReliabilityEngine --> ScenarioLibrary
-    OperationalModel --> MissionOps
-    OperationalModel --> FactoryOps
-    MissionNetworkModel --> TelemetryFrames
+    ReliabilityEngine --> IndustrialCommunicationsModel
     MissionNetworkModel --> Routing
     MissionNetworkModel --> Readiness
     ProductionModel --> Lots
-    ProductionModel --> Recipes
     ProductionModel --> MESState[WIP / Hold / Release]
+    IndustrialCommunicationsModel --> MQTT
+    IndustrialCommunicationsModel --> OPCUA[OPC-UA]
     ReliabilityEngine --> Evidence
     ReliabilityEngine --> Metrics
 ```
 
 See:
 
+- [`docs/DEMO.md`](docs/DEMO.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/STATE-MODELS.md`](docs/STATE-MODELS.md)
 - [`docs/MISSION-NETWORK-MODEL.md`](docs/MISSION-NETWORK-MODEL.md)
 - [`docs/PRODUCTION-MODEL.md`](docs/PRODUCTION-MODEL.md)
+- [`docs/INDUSTRIAL-COMMUNICATIONS.md`](docs/INDUSTRIAL-COMMUNICATIONS.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 
 ## Direction
 
-The project is intentionally growing toward engineering concepts relevant to both advanced manufacturing systems and space/mission reliability work.
+v0.6.0 is the first presentation-focused checkpoint combining mature Mission failover/readiness behavior with Factory production and industrial-communications reliability flows.
 
-Next major track: **v0.6 Industrial Communications** — MQTT telemetry, OPC-UA simulation, communications health, and reconnect scenarios.
+Next major engineering track: **v0.7 Observability Platform** — persistent event/telemetry history, expanded Prometheus coverage, Grafana, SLO views, and incident trends.
 
 ## Author
 

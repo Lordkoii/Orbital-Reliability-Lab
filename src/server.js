@@ -20,6 +20,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && pathname === '/api/health') {
     const snapshot = engine.getSnapshot();
+    const factoryComms = snapshot.industrialCommunications;
     return sendJson(res, snapshot.status === 'INCIDENT' ? 503 : 200, {
       ok: snapshot.status !== 'INCIDENT',
       status: snapshot.status,
@@ -27,6 +28,18 @@ const server = http.createServer(async (req, res) => {
       impact: snapshot.operationalImpact.level,
       productionHold: snapshot.production?.metrics.heldLots || 0,
       missionReadiness: snapshot.missionNetwork?.readiness.state || null,
+      industrialCommunications: factoryComms ? {
+        mqtt: factoryComms.broker.state,
+        connectedEndpoints: factoryComms.metrics.connectedEndpoints,
+        totalEndpoints: factoryComms.metrics.totalEndpoints,
+        validation: factoryComms.validation.state,
+        opcUa: {
+          state: factoryComms.opcUa.state,
+          sessionState: factoryComms.opcUa.sessionState,
+          sessions: factoryComms.opcUa.sessions,
+          validation: factoryComms.opcUa.validation.state
+        }
+      } : null,
       updatedAt: snapshot.updatedAt
     });
   }
@@ -36,6 +49,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/api/events') return sendJson(res, 200, { events: engine.events });
   if (req.method === 'GET' && pathname === '/api/production') return sendJson(res, 200, { production: engine.getSnapshot().production });
   if (req.method === 'GET' && pathname === '/api/mission/network') return sendJson(res, 200, { missionNetwork: engine.getSnapshot().missionNetwork });
+  if (req.method === 'GET' && pathname === '/api/factory/communications') {
+    const snapshot = engine.getSnapshot();
+    if (snapshot.environment.id !== 'factory') return sendJson(res, 409, { error: 'Industrial communications are only available in Factory Operations' });
+    return sendJson(res, 200, { industrialCommunications: snapshot.industrialCommunications });
+  }
   if (req.method === 'GET' && pathname === '/api/metrics') {
     const snapshot = engine.getSnapshot();
     const stateMap = { NOMINAL: 0, DEGRADED: 1, INCIDENT: 2, RECOVERING: 3 };
@@ -64,11 +82,29 @@ const server = http.createServer(async (req, res) => {
         '# HELP orbital_mission_readiness_info Mission readiness state', '# TYPE orbital_mission_readiness_info gauge', `orbital_mission_readiness_info{state="${network.readiness.state}"} ${readinessMap[network.readiness.state] ?? -1}`
       );
     }
-    if (snapshot.production) {
+    if (snapshot.production && snapshot.industrialCommunications) {
+      const comms = snapshot.industrialCommunications;
+      const mqttStateMap = { OFFLINE: 0, RECONNECTING: 1, ONLINE: 2 };
+      const validationMap = { FAIL: 0, PENDING: 1, RUNNING: 2, PASS: 3 };
+      const opcUaStateMap = { SESSION_LOST: 0, RECONNECTING: 1, ONLINE: 2 };
+      const opcUaSessionMap = { LOST: 0, NEGOTIATING: 1, ACTIVE: 2 };
       lines.push('# HELP orbital_factory_wip_lots Factory lots not yet completed', '# TYPE orbital_factory_wip_lots gauge', `orbital_factory_wip_lots ${snapshot.production.metrics.wipLots}`,
         '# HELP orbital_factory_held_lots Factory lots held by operational protection', '# TYPE orbital_factory_held_lots gauge', `orbital_factory_held_lots ${snapshot.production.metrics.heldLots}`,
         '# HELP orbital_factory_wafers_wip Wafers currently in WIP', '# TYPE orbital_factory_wafers_wip gauge', `orbital_factory_wafers_wip ${snapshot.production.metrics.wafersInWip}`,
-        '# HELP orbital_factory_completed_lots Completed production lots', '# TYPE orbital_factory_completed_lots counter', `orbital_factory_completed_lots ${snapshot.production.metrics.completedLots}`);
+        '# HELP orbital_factory_completed_lots Completed production lots', '# TYPE orbital_factory_completed_lots counter', `orbital_factory_completed_lots ${snapshot.production.metrics.completedLots}`,
+        '# HELP orbital_factory_mqtt_state Simulated MQTT broker state', '# TYPE orbital_factory_mqtt_state gauge', `orbital_factory_mqtt_state{state="${comms.broker.state}"} ${mqttStateMap[comms.broker.state] ?? -1}`,
+        '# HELP orbital_factory_mqtt_connected_endpoints Connected simulated MQTT equipment endpoints', '# TYPE orbital_factory_mqtt_connected_endpoints gauge', `orbital_factory_mqtt_connected_endpoints ${comms.metrics.connectedEndpoints}`,
+        '# HELP orbital_factory_mqtt_messages_published_total Simulated MQTT messages published', '# TYPE orbital_factory_mqtt_messages_published_total counter', `orbital_factory_mqtt_messages_published_total ${comms.metrics.messagesPublished}`,
+        '# HELP orbital_factory_mqtt_messages_dropped_total Simulated MQTT messages dropped', '# TYPE orbital_factory_mqtt_messages_dropped_total counter', `orbital_factory_mqtt_messages_dropped_total ${comms.metrics.messagesDropped}`,
+        '# HELP orbital_factory_mqtt_reconnects_total Simulated MQTT reconnect cycles', '# TYPE orbital_factory_mqtt_reconnects_total counter', `orbital_factory_mqtt_reconnects_total ${comms.metrics.reconnectCount}`,
+        '# HELP orbital_factory_mqtt_validation_state Communications validation state', '# TYPE orbital_factory_mqtt_validation_state gauge', `orbital_factory_mqtt_validation_state{state="${comms.validation.state}"} ${validationMap[comms.validation.state] ?? -1}`,
+        '# HELP orbital_factory_opcua_state Simulated OPC-UA adapter state', '# TYPE orbital_factory_opcua_state gauge', `orbital_factory_opcua_state{state="${comms.opcUa.state}"} ${opcUaStateMap[comms.opcUa.state] ?? -1}`,
+        '# HELP orbital_factory_opcua_session_state Simulated OPC-UA session state', '# TYPE orbital_factory_opcua_session_state gauge', `orbital_factory_opcua_session_state{state="${comms.opcUa.sessionState}"} ${opcUaSessionMap[comms.opcUa.sessionState] ?? -1}`,
+        '# HELP orbital_factory_opcua_sessions Active simulated OPC-UA sessions', '# TYPE orbital_factory_opcua_sessions gauge', `orbital_factory_opcua_sessions ${comms.opcUa.sessions}`,
+        '# HELP orbital_factory_opcua_reads_total Successful OPC-UA monitored-node reads', '# TYPE orbital_factory_opcua_reads_total counter', `orbital_factory_opcua_reads_total ${comms.metrics.opcUaReads}`,
+        '# HELP orbital_factory_opcua_stale_reads_total Failed or stale OPC-UA reads', '# TYPE orbital_factory_opcua_stale_reads_total counter', `orbital_factory_opcua_stale_reads_total ${comms.metrics.opcUaStaleReads}`,
+        '# HELP orbital_factory_opcua_reconnects_total Simulated OPC-UA session reconnects', '# TYPE orbital_factory_opcua_reconnects_total counter', `orbital_factory_opcua_reconnects_total ${comms.metrics.opcUaReconnectCount}`,
+        '# HELP orbital_factory_opcua_validation_state OPC-UA validation state', '# TYPE orbital_factory_opcua_validation_state gauge', `orbital_factory_opcua_validation_state{state="${comms.opcUa.validation.state}"} ${validationMap[comms.opcUa.validation.state] ?? -1}`);
     }
     res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(`${lines.join('\n')}\n`);
   }
@@ -79,6 +115,14 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && pathname === '/api/mission/frames') { const body = await readJson(req); const result = engine.advanceMissionFrames(body.count || 120); return sendJson(res, result.ok ? 200 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/production/lots') { const body = await readJson(req); const result = engine.createLot(body); return sendJson(res, result.ok ? 201 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/production/advance') { const body = await readJson(req); const result = engine.advanceLot(body.id); return sendJson(res, result.ok ? 200 : 409, result); }
+  if (req.method === 'POST' && pathname === '/api/factory/communications/publish') {
+    const result = engine.publishFactoryCommunications();
+    return sendJson(res, result.ok ? 200 : 409, result);
+  }
+  if (req.method === 'POST' && pathname === '/api/factory/communications/opcua/read') {
+    const result = engine.readFactoryOpcUa();
+    return sendJson(res, result.ok ? 200 : 409, result);
+  }
   if (req.method === 'POST' && pathname === '/api/faults') { const body = await readJson(req); const result = engine.injectFault(body.type, { target: body.target || null }); return sendJson(res, result.ok ? 202 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/recover') { const result = engine.recover('manual'); return sendJson(res, result.ok ? 202 : 409, result); }
   if (req.method === 'POST' && pathname === '/api/auto-recovery') { const body = await readJson(req); return sendJson(res, 200, engine.setAutoRecovery(body.enabled)); }

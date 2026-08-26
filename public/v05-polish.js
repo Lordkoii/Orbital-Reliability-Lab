@@ -1,4 +1,5 @@
 await import('/app.js');
+await import('/v06-industrial-communications.js');
 
 const $ = (id) => document.getElementById(id);
 const contractNodes = [...document.querySelectorAll('.contract-flow .flow-node')];

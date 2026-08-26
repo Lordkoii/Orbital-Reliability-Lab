@@ -20,6 +20,16 @@ export const SCENARIOS = [
     response: 'Detect resource exhaustion, isolate the service, recover capacity, and validate command readiness.'
   },
   {
+    id: 'factory-mqtt-broker-outage', environment: 'factory', name: 'MQTT Broker Outage',
+    summary: 'The factory equipment messaging broker becomes unavailable and all registered telemetry endpoints disconnect.', faultType: 'service_down', target: 'ORL-MQTT-01',
+    response: 'Detect broker loss, hold active production, measure dropped equipment messages, reconnect endpoints, republish telemetry, and validate communications.'
+  },
+  {
+    id: 'factory-opcua-session-loss', environment: 'factory', name: 'OPC-UA Session Loss',
+    summary: 'The metrology OPC-UA adapter loses its active session and monitored equipment state becomes stale.', faultType: 'protocol_session_loss', target: 'ORL-OPCUA-01',
+    response: 'Detect stale metrology data, protect quality-sensitive WIP, reconnect the OPC-UA session, read the monitored node back, and validate protocol health.'
+  },
+  {
     id: 'factory-equipment-link-loss', environment: 'factory', name: 'Metrology Link Loss',
     summary: 'Metrology equipment communication becomes unreliable during production.', faultType: 'packet_loss', target: 'MET-01',
     response: 'Detect communication loss, place affected quality flow on hold, recover connectivity, and validate data flow.'
