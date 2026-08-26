@@ -141,10 +141,15 @@ Additional suites:
 ```bash
 npm run test:api
 npm run test:ui
+```
+
+For the smoke check, start ORL in one terminal and run this in a second terminal:
+
+```bash
 npm run smoke
 ```
 
-`npm run smoke` expects ORL to already be running at `http://127.0.0.1:3000` unless `BASE_URL` is supplied.
+The smoke check uses `http://127.0.0.1:3000` unless `BASE_URL` is supplied.
 
 ## API
 
