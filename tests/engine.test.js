@@ -70,6 +70,46 @@ test('MES outage holds tracked factory equipment', async () => {
   assert.match(snapshot.operationalImpact.headline, /Factory execution hold/);
 });
 
+test('MQTT broker outage disconnects equipment messaging, holds WIP, and validates reconnect', async () => {
+  const engine = new ReliabilityEngine({ environment: 'factory' });
+  engine.setAutoRecovery(false);
+  engine.advanceLot('LOT-DEMO-001');
+  engine.publishFactoryCommunications();
+
+  const injected = engine.runScenario('factory-mqtt-broker-outage');
+  assert.equal(injected.ok, true);
+  assert.equal(injected.snapshot.status, 'DEGRADED');
+  assert.equal(injected.snapshot.industrialCommunications.broker.state, 'OFFLINE');
+  assert.equal(injected.snapshot.industrialCommunications.metrics.connectedEndpoints, 0);
+  assert.equal(injected.snapshot.industrialCommunications.validation.state, 'PENDING');
+
+  await sleep(900);
+  const incident = engine.getSnapshot();
+  assert.equal(incident.status, 'INCIDENT');
+  assert.equal(incident.production.metrics.heldLots, 1);
+  assert.equal(incident.production.lots[0].status, 'HOLD');
+  assert.equal(incident.industrialCommunications.metrics.messagesDropped, 6);
+  assert.equal(incident.operationalImpact.level, 'CRITICAL');
+  assert.match(incident.operationalImpact.headline, /communications outage/i);
+
+  const recovery = engine.recover('manual');
+  assert.equal(recovery.ok, true);
+  assert.equal(recovery.snapshot.status, 'RECOVERING');
+  assert.equal(recovery.snapshot.industrialCommunications.broker.state, 'RECONNECTING');
+  assert.equal(recovery.snapshot.industrialCommunications.validation.state, 'RUNNING');
+
+  await sleep(900);
+  const final = engine.getSnapshot();
+  assert.equal(final.status, 'NOMINAL');
+  assert.equal(final.production.metrics.heldLots, 0);
+  assert.equal(final.production.lots[0].status, 'RUNNING');
+  assert.equal(final.industrialCommunications.broker.state, 'ONLINE');
+  assert.equal(final.industrialCommunications.metrics.connectedEndpoints, 6);
+  assert.equal(final.industrialCommunications.metrics.reconnectCount, 1);
+  assert.equal(final.industrialCommunications.validation.state, 'PASS');
+  assert.ok(final.industrialCommunications.metrics.messagesPublished >= 12);
+});
+
 test('material handling saturation starves process equipment', async () => {
   const engine = new ReliabilityEngine({ environment: 'factory' });
   engine.setAutoRecovery(false);
