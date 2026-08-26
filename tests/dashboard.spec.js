@@ -45,6 +45,21 @@ test('factory tools expose lifecycle controls', async ({ page }) => {
   await expect(page.locator('[data-system-id="LITH-01"]')).toContainText('SETUP');
 });
 
+test('factory dashboard exposes MQTT communications evidence and publishes equipment snapshot', async ({ page }) => {
+  await page.getByRole('button', { name: /Factory Operations/ }).click();
+  const section = page.locator('#industrialCommunicationsSection');
+  await expect(section).toBeVisible();
+  await expect(page.getByText('FACTORY INDUSTRIAL COMMUNICATIONS / v0.6', { exact: true })).toBeVisible();
+  await expect(page.locator('#mqttBrokerState')).toHaveText('ONLINE');
+  await expect(page.locator('#mqttConnected')).toHaveText('6/6');
+  await expect(page.locator('#opcUaState')).toHaveText('STANDBY');
+  await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText('CONNECTED');
+  await expect(page.locator('#mqttPublished')).toHaveText('0');
+  await page.getByRole('button', { name: 'Publish Equipment Snapshot' }).click();
+  await expect(page.locator('#mqttPublished')).toHaveText('6');
+  await expect(page.locator('[data-endpoint-id="LITH-01"]')).toContainText(/SEQ\s+1/);
+});
+
 test('mission ground-link scenario exposes degraded failover story and pending validation', async ({ page, request }) => {
   await request.post('/api/auto-recovery', { data: { enabled: false } });
   await page.getByRole('button', { name: /Ground Link Degradation/ }).click();
