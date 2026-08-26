@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test tests/engine.test.js tests/mission-network-model.test.js tests/production-model.test.js",
+    "test": "node --test tests/engine.test.js tests/mission-network-model.test.js tests/production-model.test.js tests/industrial-communications-model.test.js",
     "smoke": "node scripts/smoke-test.mjs",
     "test:e2e": "playwright test",
     "test:api": "playwright test tests/api.spec.js",
