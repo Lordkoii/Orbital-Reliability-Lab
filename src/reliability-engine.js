@@ -3,8 +3,11 @@ import { getScenario, getScenarios } from './scenario-library.js';
 import { OperationalModel } from './operational-model.js';
 import { ProductionModel } from './production-model.js';
 import { MissionNetworkModel } from './mission-network-model.js';
+import { IndustrialCommunicationsModel } from './industrial-communications-model.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const MQTT_BROKER_ID = 'ORL-MQTT-01';
+const FACTORY_COMM_ASSETS = ['LITH-01', 'ETCH-01', 'DEP-01', 'MET-01', 'AMHS-01', 'MES-01'];
 
 export class ReliabilityEngine {
   constructor({ environment = 'mission' } = {}) {
@@ -15,6 +18,7 @@ export class ReliabilityEngine {
     this.operationalModel = new OperationalModel(this.getEnvironment());
     this.productionModel = new ProductionModel();
     this.missionNetworkModel = new MissionNetworkModel();
+    this.industrialCommunicationsModel = new IndustrialCommunicationsModel();
     this.reset();
   }
 
@@ -31,6 +35,7 @@ export class ReliabilityEngine {
     const environment = this.getEnvironment();
     this.operationalModel.reset(environment);
     this.missionNetworkModel.reset();
+    this.industrialCommunicationsModel.reset();
     if (environment.id === 'factory') this.productionModel.reset();
     this.events = [this.event('SYSTEM', `${environment.name} initialized`, 'info')];
     this.recoveryTimer = null;
@@ -57,7 +62,10 @@ export class ReliabilityEngine {
   advanceSystem(id) {
     if (this.activeFault) return { ok: false, reason: 'Cannot advance equipment during an active incident', snapshot: this.getSnapshot() };
     const result = this.operationalModel.advanceFactoryAsset(id);
-    if (result.ok) this.pushEvent('STATE', `${id}: advanced to ${result.system.state}`, 'success');
+    if (result.ok) {
+      this.pushEvent('STATE', `${id}: advanced to ${result.system.state}`, 'success');
+      if (this.environmentId === 'factory') this.industrialCommunicationsModel.publish(id, result.system);
+    }
     return { ...result, snapshot: this.getSnapshot() };
   }
 
@@ -80,7 +88,18 @@ export class ReliabilityEngine {
     if (this.environmentId !== 'factory') return { ok: false, reason: 'Production controls are only available in Factory Operations', snapshot: this.getSnapshot() };
     if (this.activeFault) return { ok: false, reason: 'Cannot advance production during an active incident', snapshot: this.getSnapshot() };
     const result = this.productionModel.advanceLot(id);
-    if (result.ok) this.pushEvent('MES', `${id}: ${result.lot.status} · ${result.lot.currentOperation}${result.lot.assignedTool ? ` · ${result.lot.assignedTool}` : ''}`, result.lot.status === 'COMPLETED' ? 'success' : 'info');
+    if (result.ok) {
+      this.pushEvent('MES', `${id}: ${result.lot.status} · ${result.lot.currentOperation}${result.lot.assignedTool ? ` · ${result.lot.assignedTool}` : ''}`, result.lot.status === 'COMPLETED' ? 'success' : 'info');
+      this.industrialCommunicationsModel.publishFactorySnapshot(this.operationalModel.snapshot().systems);
+    }
+    return { ...result, snapshot: this.getSnapshot() };
+  }
+
+  publishFactoryCommunications() {
+    if (this.environmentId !== 'factory') return { ok: false, reason: 'Industrial communications are only available in Factory Operations', snapshot: this.getSnapshot() };
+    const result = this.industrialCommunicationsModel.publishFactorySnapshot(this.operationalModel.snapshot().systems);
+    const severity = result.dropped ? 'warning' : 'success';
+    this.pushEvent('MQTT', `${result.published} equipment telemetry messages published${result.dropped ? ` · ${result.dropped} dropped` : ''} through ${result.snapshot.broker.id}`, severity);
     return { ...result, snapshot: this.getSnapshot() };
   }
 
@@ -96,6 +115,7 @@ export class ReliabilityEngine {
       activePath: operational.activePath,
       missionNetwork: this.environmentId === 'mission' ? this.missionNetworkModel.snapshot() : null,
       production: this.environmentId === 'factory' ? this.productionModel.snapshot() : null,
+      industrialCommunications: this.environmentId === 'factory' ? this.industrialCommunicationsModel.snapshot() : null,
       scenarios: this.getScenarios(),
       activeFault: this.activeFault,
       activeScenario: this.activeScenario,
@@ -144,12 +164,26 @@ export class ReliabilityEngine {
     this.activeFault = { type, label: context.label || fault.label, target: context.target || null, scenarioId: context.scenarioId || null, summary: context.summary || null, incidentId: `IR-${String(this.incidentCounter).padStart(3, '0')}`, injectedAt: new Date().toISOString() };
     fault.mutate();
     this.status = 'DEGRADED';
-    if (this.activeFault.target) {
+
+    const mqttOutage = this.environmentId === 'factory' && this.activeFault.target === MQTT_BROKER_ID;
+    if (mqttOutage) {
+      this.industrialCommunicationsModel.injectBrokerOutage(this.activeFault.label);
+      this.operationalModel.setImpact(
+        'DEGRADED',
+        'Factory messaging degraded',
+        'The MQTT broker is unavailable. Equipment telemetry delivery is interrupted while production protection remains armed.',
+        FACTORY_COMM_ASSETS
+      );
+    } else if (this.activeFault.target) {
       this.operationalModel.inject(this.activeFault.target, type);
       if (this.environmentId === 'mission') this.missionNetworkModel.inject(this.activeFault.target, type);
     }
+
     const target = this.activeFault.target ? ` on ${this.activeFault.target}` : '';
     this.pushEvent('FAULT', `${this.activeFault.incidentId}: ${this.activeFault.label}${target} injected`, 'warning');
+    if (mqttOutage) {
+      this.pushEvent('MQTT', `${this.activeFault.incidentId}: ${MQTT_BROKER_ID} OFFLINE · 0/${FACTORY_COMM_ASSETS.length} endpoints connected`, 'warning');
+    }
     if (this.environmentId === 'mission' && this.activeFault.target) {
       const network = this.missionNetworkModel.snapshot();
       this.pushEvent('NETWORK', `${this.activeFault.incidentId}: telemetry window ${network.frames.lastWindow.continuityPct.toFixed(2)}% · readiness ${network.readiness.state}`, network.readiness.state === 'NO-GO' ? 'critical' : 'warning');
@@ -162,11 +196,25 @@ export class ReliabilityEngine {
     if (!this.activeFault) return;
     this.status = 'INCIDENT';
     this.detectedAt = Date.now();
-    if (this.activeFault.target) {
+    const mqttOutage = this.environmentId === 'factory' && this.activeFault.target === MQTT_BROKER_ID;
+
+    if (mqttOutage) {
+      this.industrialCommunicationsModel.detectBrokerOutage();
+      const dropEvidence = this.industrialCommunicationsModel.publishFactorySnapshot(this.operationalModel.snapshot().systems);
+      this.productionModel.hold('MQTT broker unavailable; equipment telemetry acknowledgement unavailable');
+      this.operationalModel.setImpact(
+        'CRITICAL',
+        'Factory communications outage',
+        'Equipment messaging is disconnected. Active WIP is held until the broker, endpoint sessions, and telemetry delivery are restored and validated.',
+        FACTORY_COMM_ASSETS
+      );
+      this.pushEvent('MQTT', `${this.activeFault.incidentId}: broker outage confirmed · ${dropEvidence.dropped} equipment messages dropped`, 'critical');
+    } else if (this.activeFault.target) {
       this.operationalModel.detect(this.activeFault.target);
       if (this.environmentId === 'mission') this.missionNetworkModel.detect(this.activeFault.target);
     }
-    if (this.environmentId === 'factory') {
+
+    if (this.environmentId === 'factory' && !mqttOutage) {
       const target = this.activeFault.target;
       if (target === 'MES-01') this.productionModel.hold('MES unavailable; production-state integrity protection');
       if (target === 'AMHS-01') this.productionModel.hold('Material handling unavailable');
@@ -193,20 +241,41 @@ export class ReliabilityEngine {
     if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
     const incidentId = this.activeFault.incidentId;
     const targetId = this.activeFault.target;
+    const mqttOutage = this.environmentId === 'factory' && targetId === MQTT_BROKER_ID;
     this.status = 'RECOVERING';
-    if (targetId) {
+
+    if (mqttOutage) {
+      this.industrialCommunicationsModel.beginReconnect();
+      this.operationalModel.setImpact(
+        'RECOVERING',
+        'Factory messaging reconnecting',
+        'The MQTT broker has restarted. Equipment sessions are reconnecting before telemetry republish and production release validation.',
+        FACTORY_COMM_ASSETS
+      );
+      this.pushEvent('MQTT', `${incidentId}: ${MQTT_BROKER_ID} RECONNECTING · endpoint sessions pending`, 'info');
+    } else if (targetId) {
       this.operationalModel.recover(targetId);
       if (this.environmentId === 'mission') this.missionNetworkModel.recover(targetId);
     }
     this.pushEvent('RECOVERY', `${incidentId}: Recovery action applied (${mode})`, 'info');
-    this.pushEvent('VALIDATE', `${incidentId}: Running post-recovery health, dependency, continuity, and production-state checks`, 'info');
+    this.pushEvent('VALIDATE', `${incidentId}: Running post-recovery health, dependency, continuity, communications, and production-state checks`, 'info');
 
     setTimeout(() => {
       this.metrics = this.baselineMetrics();
       this.lastMttrMs = this.detectedAt ? Date.now() - this.detectedAt : null;
       if (targetId) this.operationalModel.validate(targetId);
       let missionValidation = null;
+      let communicationsValidation = null;
       if (this.environmentId === 'mission' && targetId) missionValidation = this.missionNetworkModel.validate(targetId);
+      if (mqttOutage) {
+        communicationsValidation = this.industrialCommunicationsModel.validateReconnect(this.operationalModel.snapshot().systems);
+        const comms = communicationsValidation.snapshot;
+        this.pushEvent(
+          'MQTT',
+          `${incidentId}: reconnect validation ${comms.validation.state} · ${comms.metrics.connectedEndpoints}/${comms.metrics.totalEndpoints} endpoints · ${communicationsValidation.published} telemetry messages republished`,
+          communicationsValidation.ok ? 'success' : 'critical'
+        );
+      }
       if (this.environmentId === 'factory') {
         const held = this.productionModel.metrics().heldLots;
         if (held) { this.productionModel.release(); this.pushEvent('MES', `${held} held lot(s) reconciled and released after validation`, 'success'); }
