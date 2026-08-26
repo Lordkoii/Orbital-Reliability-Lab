@@ -20,6 +20,11 @@ export const SCENARIOS = [
     response: 'Detect resource exhaustion, isolate the service, recover capacity, and validate command readiness.'
   },
   {
+    id: 'factory-mqtt-broker-outage', environment: 'factory', name: 'MQTT Broker Outage',
+    summary: 'The factory equipment messaging broker becomes unavailable and all registered telemetry endpoints disconnect.', faultType: 'service_down', target: 'ORL-MQTT-01',
+    response: 'Detect broker loss, hold active production, measure dropped equipment messages, reconnect endpoints, republish telemetry, and validate communications.'
+  },
+  {
     id: 'factory-equipment-link-loss', environment: 'factory', name: 'Metrology Link Loss',
     summary: 'Metrology equipment communication becomes unreliable during production.', faultType: 'packet_loss', target: 'MET-01',
     response: 'Detect communication loss, place affected quality flow on hold, recover connectivity, and validate data flow.'
