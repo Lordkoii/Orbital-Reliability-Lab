@@ -123,14 +123,52 @@ test('factory communications API exposes MQTT topology and publishes equipment s
   expect(initial.industrialCommunications.broker.state).toBe('ONLINE');
   expect(initial.industrialCommunications.metrics.connectedEndpoints).toBe(6);
   expect(initial.industrialCommunications.metrics.messagesPublished).toBe(0);
+  expect(initial.industrialCommunications.validation.state).toBe('PASS');
   expect(initial.industrialCommunications.opcUa.state).toBe('STANDBY');
 
   const publishedResponse = await request.post('/api/factory/communications/publish');
   expect(publishedResponse.ok()).toBeTruthy();
   const published = await publishedResponse.json();
   expect(published.published).toBe(6);
-  expect(published.snapshot.metrics.messagesPublished).toBe(6);
-  expect(published.snapshot.endpoints.find(endpoint => endpoint.assetId === 'LITH-01').lastSequence).toBeGreaterThan(0);
+  expect(published.snapshot.industrialCommunications.metrics.messagesPublished).toBe(6);
+  expect(published.snapshot.industrialCommunications.endpoints.find(endpoint => endpoint.assetId === 'LITH-01').lastSequence).toBeGreaterThan(0);
+});
+
+test('factory MQTT broker outage records drops, protects WIP, reconnects, and validates delivery', async ({ request }) => {
+  await request.post('/api/environment', { data: { id: 'factory' } });
+  const production = await (await request.get('/api/production')).json();
+  const lotId = production.production.lots[0].id;
+  await request.post('/api/production/advance', { data: { id: lotId } });
+  await request.post('/api/factory/communications/publish');
+  await request.post('/api/auto-recovery', { data: { enabled: false } });
+
+  const injected = await request.post('/api/scenarios/run', { data: { id: 'factory-mqtt-broker-outage' } });
+  expect(injected.status()).toBe(202);
+  let body = await injected.json();
+  expect(body.snapshot.industrialCommunications.broker.state).toBe('OFFLINE');
+  expect(body.snapshot.industrialCommunications.metrics.connectedEndpoints).toBe(0);
+
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('INCIDENT');
+  body = await (await request.get('/api/telemetry')).json();
+  expect(body.production.metrics.heldLots).toBe(1);
+  expect(body.industrialCommunications.metrics.messagesDropped).toBe(6);
+  expect(body.industrialCommunications.validation.state).toBe('PENDING');
+  expect(body.operationalImpact.headline).toMatch(/communications outage/i);
+
+  const recovery = await request.post('/api/recover');
+  expect(recovery.status()).toBe(202);
+  const recovering = await recovery.json();
+  expect(recovering.snapshot.industrialCommunications.broker.state).toBe('RECONNECTING');
+  expect(recovering.snapshot.industrialCommunications.validation.state).toBe('RUNNING');
+
+  await expect.poll(async () => (await (await request.get('/api/telemetry')).json()).status, { timeout: 2500 }).toBe('NOMINAL');
+  body = await (await request.get('/api/telemetry')).json();
+  expect(body.production.metrics.heldLots).toBe(0);
+  expect(body.industrialCommunications.broker.state).toBe('ONLINE');
+  expect(body.industrialCommunications.metrics.connectedEndpoints).toBe(6);
+  expect(body.industrialCommunications.metrics.reconnectCount).toBe(1);
+  expect(body.industrialCommunications.validation.state).toBe('PASS');
+  expect(body.industrialCommunications.metrics.messagesPublished).toBeGreaterThanOrEqual(12);
 });
 
 test('factory communications endpoint is rejected outside Factory Operations', async ({ request }) => {
