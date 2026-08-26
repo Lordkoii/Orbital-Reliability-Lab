@@ -11,6 +11,7 @@ test('starts with an online simulated MQTT topology for factory assets', () => {
   assert.equal(snapshot.broker.implementation, 'IN_MEMORY_SIMULATION');
   assert.equal(snapshot.metrics.connectedEndpoints, 6);
   assert.equal(snapshot.metrics.messagesPublished, 0);
+  assert.equal(snapshot.validation.state, 'PASS');
   assert.equal(snapshot.opcUa.state, 'STANDBY');
 
   const lith = snapshot.endpoints.find((endpoint) => endpoint.assetId === 'LITH-01');
@@ -41,8 +42,48 @@ test('publishes a factory system snapshot across registered endpoints', () => {
   const result = model.publishFactorySnapshot(systems);
   assert.equal(result.ok, true);
   assert.equal(result.published, 2);
+  assert.equal(result.dropped, 0);
   assert.equal(result.snapshot.metrics.messagesPublished, 2);
   assert.equal(result.snapshot.endpoints.find((endpoint) => endpoint.assetId === 'MES-01').lastPayload.state, 'ONLINE');
+});
+
+test('broker outage disconnects endpoints, records drops, reconnects, and validates telemetry', () => {
+  const model = new IndustrialCommunicationsModel();
+  const systems = [
+    { id: 'LITH-01', state: 'RUNNING', health: 'NOMINAL' },
+    { id: 'ETCH-01', state: 'IDLE', health: 'NOMINAL' },
+    { id: 'DEP-01', state: 'IDLE', health: 'NOMINAL' },
+    { id: 'MET-01', state: 'IDLE', health: 'NOMINAL' },
+    { id: 'AMHS-01', state: 'READY', health: 'NOMINAL' },
+    { id: 'MES-01', state: 'ONLINE', health: 'NOMINAL' }
+  ];
+
+  const injected = model.injectBrokerOutage('test outage');
+  assert.equal(injected.ok, true);
+  assert.equal(injected.snapshot.broker.state, 'OFFLINE');
+  assert.equal(injected.snapshot.metrics.connectedEndpoints, 0);
+  assert.equal(injected.snapshot.validation.state, 'PENDING');
+
+  model.detectBrokerOutage();
+  const dropped = model.publishFactorySnapshot(systems);
+  assert.equal(dropped.ok, false);
+  assert.equal(dropped.published, 0);
+  assert.equal(dropped.dropped, 6);
+  assert.equal(dropped.snapshot.metrics.messagesDropped, 6);
+
+  const reconnecting = model.beginReconnect();
+  assert.equal(reconnecting.snapshot.broker.state, 'RECONNECTING');
+  assert.equal(reconnecting.snapshot.validation.state, 'RUNNING');
+
+  const validated = model.validateReconnect(systems);
+  assert.equal(validated.ok, true);
+  assert.equal(validated.published, 6);
+  assert.equal(validated.snapshot.broker.state, 'ONLINE');
+  assert.equal(validated.snapshot.metrics.connectedEndpoints, 6);
+  assert.equal(validated.snapshot.metrics.reconnectCount, 1);
+  assert.equal(validated.snapshot.validation.state, 'PASS');
+  assert.equal(validated.snapshot.metrics.messagesDropped, 6);
+  assert.equal(validated.snapshot.metrics.messagesPublished, 6);
 });
 
 test('rejects unknown communications endpoints', () => {
