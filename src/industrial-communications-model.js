@@ -1,4 +1,5 @@
 const FACTORY_ASSETS = ['LITH-01', 'ETCH-01', 'DEP-01', 'MET-01', 'AMHS-01', 'MES-01'];
+const OPCUA_MONITORED_ASSET = 'MET-01';
 
 const topicFor = (assetId, channel) => `factory/equipment/${assetId}/${channel}`;
 
@@ -36,10 +37,35 @@ export class IndustrialCommunicationsModel {
     };
     this.opcUa = {
       id: 'ORL-OPCUA-01',
+      protocol: 'OPC-UA',
       implementation: 'SIMULATED_ADAPTER',
-      state: 'STANDBY',
-      sessions: 0,
-      note: 'Reserved for the next v0.6 increment.'
+      state: 'ONLINE',
+      endpointUrl: 'opc.tcp://orl-factory:4840',
+      namespace: 'urn:orl:factory',
+      monitoredAsset: OPCUA_MONITORED_ASSET,
+      monitoredNode: `ns=2;s=Equipment/${OPCUA_MONITORED_ASSET}/State`,
+      sessions: 1,
+      sessionState: 'ACTIVE',
+      reads: 0,
+      staleReads: 0,
+      reconnectCount: 0,
+      lastReadAt: null,
+      lastValue: null,
+      note: 'Simulated OPC-UA session monitoring metrology state and health.',
+      validation: {
+        state: 'PASS',
+        detail: 'Adapter online; monitored metrology node is readable.',
+        validatedAt: new Date().toISOString()
+      },
+      outage: {
+        active: false,
+        state: 'CLEAR',
+        injectedAt: null,
+        detectedAt: null,
+        reconnectStartedAt: null,
+        recoveredAt: null,
+        reason: null
+      }
     };
     this.endpoints = FACTORY_ASSETS.map((assetId) => ({
       assetId,
@@ -184,12 +210,121 @@ export class IndustrialCommunicationsModel {
     return { ok: passed, published: publishResult.published, snapshot: this.snapshot() };
   }
 
+  readOpcUaNode(systems = []) {
+    const system = systems.find((candidate) => candidate.id === this.opcUa.monitoredAsset);
+    const at = new Date().toISOString();
+    if (this.opcUa.state !== 'ONLINE' || this.opcUa.sessions < 1 || this.opcUa.sessionState !== 'ACTIVE') {
+      this.opcUa.staleReads += 1;
+      this.opcUa.lastReadAt = at;
+      this.opcUa.lastValue = {
+        nodeId: this.opcUa.monitoredNode,
+        assetId: this.opcUa.monitoredAsset,
+        statusCode: 'BadSessionClosed',
+        stale: true,
+        sourceTimestamp: at
+      };
+      return { ok: false, reason: 'OPC-UA session unavailable', value: { ...this.opcUa.lastValue }, snapshot: this.snapshot() };
+    }
+    if (!system) return { ok: false, reason: 'Monitored OPC-UA asset unavailable', snapshot: this.snapshot() };
+
+    this.opcUa.reads += 1;
+    this.opcUa.lastReadAt = at;
+    this.opcUa.lastValue = {
+      nodeId: this.opcUa.monitoredNode,
+      assetId: system.id,
+      state: system.state,
+      health: system.health,
+      statusCode: 'Good',
+      stale: false,
+      sourceTimestamp: at
+    };
+    return { ok: true, value: { ...this.opcUa.lastValue }, snapshot: this.snapshot() };
+  }
+
+  injectOpcUaSessionLoss(reason = 'Controlled OPC-UA session loss') {
+    if (this.opcUa.outage.active) return { ok: false, reason: 'OPC-UA outage already active', snapshot: this.snapshot() };
+    const at = new Date().toISOString();
+    this.opcUa.state = 'SESSION_LOST';
+    this.opcUa.sessions = 0;
+    this.opcUa.sessionState = 'LOST';
+    this.opcUa.note = 'Metrology adapter session lost; monitored node data is stale.';
+    this.opcUa.validation = {
+      state: 'PENDING',
+      detail: 'Session recovery and metrology node readback required.',
+      validatedAt: null
+    };
+    this.opcUa.outage = {
+      active: true,
+      state: 'INJECTED',
+      injectedAt: at,
+      detectedAt: null,
+      reconnectStartedAt: null,
+      recoveredAt: null,
+      reason
+    };
+    return { ok: true, snapshot: this.snapshot() };
+  }
+
+  detectOpcUaSessionLoss(systems = []) {
+    if (!this.opcUa.outage.active) return { ok: false, reason: 'No active OPC-UA outage', snapshot: this.snapshot() };
+    this.opcUa.outage.state = 'CONFIRMED';
+    this.opcUa.outage.detectedAt = new Date().toISOString();
+    const read = this.readOpcUaNode(systems);
+    return { ok: true, staleRead: read.value || null, snapshot: this.snapshot() };
+  }
+
+  beginOpcUaReconnect() {
+    if (!this.opcUa.outage.active) return { ok: false, reason: 'No active OPC-UA outage', snapshot: this.snapshot() };
+    this.opcUa.state = 'RECONNECTING';
+    this.opcUa.sessionState = 'NEGOTIATING';
+    this.opcUa.sessions = 0;
+    this.opcUa.note = 'Adapter transport restored; OPC-UA secure session is being re-established.';
+    this.opcUa.validation = {
+      state: 'RUNNING',
+      detail: 'Re-establishing session and preparing monitored-node readback.',
+      validatedAt: null
+    };
+    this.opcUa.outage.state = 'RECONNECTING';
+    this.opcUa.outage.reconnectStartedAt = new Date().toISOString();
+    return { ok: true, snapshot: this.snapshot() };
+  }
+
+  validateOpcUaReconnect(systems = []) {
+    if (!this.opcUa.outage.active) return { ok: false, reason: 'No active OPC-UA outage', snapshot: this.snapshot() };
+    const at = new Date().toISOString();
+    this.opcUa.state = 'ONLINE';
+    this.opcUa.sessionState = 'ACTIVE';
+    this.opcUa.sessions = 1;
+    this.opcUa.reconnectCount += 1;
+    const readback = this.readOpcUaNode(systems);
+    const passed = readback.ok && readback.value?.statusCode === 'Good' && !readback.value?.stale;
+    this.opcUa.validation = {
+      state: passed ? 'PASS' : 'FAIL',
+      detail: passed
+        ? `${this.opcUa.monitoredAsset} node readback returned Good after session reconnect.`
+        : 'OPC-UA session reconnected, but monitored-node readback did not validate.',
+      validatedAt: at
+    };
+    this.opcUa.outage.state = 'RECOVERED';
+    this.opcUa.outage.recoveredAt = at;
+    this.opcUa.outage.active = false;
+    this.opcUa.note = passed
+      ? 'Simulated OPC-UA session monitoring metrology state and health.'
+      : 'Adapter online with failed post-reconnect node validation.';
+    return { ok: passed, value: readback.value || null, snapshot: this.snapshot() };
+  }
+
   snapshot() {
     return {
       broker: { ...this.broker },
       outage: { ...this.outage },
       validation: { ...this.validation },
-      opcUa: { ...this.opcUa },
+      opcUa: {
+        ...this.opcUa,
+        validation: { ...this.opcUa.validation },
+        outage: { ...this.opcUa.outage },
+        lastValue: this.opcUa.lastValue ? { ...this.opcUa.lastValue } : null
+      },
       endpoints: this.endpoints.map((endpoint) => ({
         ...endpoint,
         topics: { ...endpoint.topics },
@@ -200,7 +335,10 @@ export class IndustrialCommunicationsModel {
         totalEndpoints: this.endpoints.length,
         messagesPublished: this.broker.messagesPublished,
         messagesDropped: this.broker.messagesDropped,
-        reconnectCount: this.broker.reconnectCount
+        reconnectCount: this.broker.reconnectCount,
+        opcUaReads: this.opcUa.reads,
+        opcUaStaleReads: this.opcUa.staleReads,
+        opcUaReconnectCount: this.opcUa.reconnectCount
       }
     };
   }
