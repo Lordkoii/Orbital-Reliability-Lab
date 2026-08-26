@@ -15,6 +15,28 @@ jobs:
           node-version: 22
       - run: npm test
 
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start ORL
+        run: |
+          npm start > /tmp/orl-server.log 2>&1 &
+          echo $! > /tmp/orl-server.pid
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:3000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/orl-server.log
+          exit 1
+      - run: npm run smoke
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 10
