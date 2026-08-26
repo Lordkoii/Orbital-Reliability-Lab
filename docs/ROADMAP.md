@@ -48,10 +48,14 @@ ORL targets engineering concepts shared by high-consequence manufacturing and sp
 
 ## v0.6 — Industrial Communications
 
-- [ ] MQTT broker and equipment telemetry topics
-- [ ] OPC-UA simulation and adapter
-- [ ] communications health monitoring
-- [ ] protocol fault and reconnect scenarios
+- [x] simulated MQTT broker and equipment telemetry topics
+- [x] simulated OPC-UA adapter and metrology session
+- [x] communications health monitoring and protocol evidence
+- [x] MQTT broker outage / reconnect scenario
+- [x] OPC-UA session-loss / reconnect scenario
+- [x] production and quality protection during communications incidents
+- [x] post-reconnect publish/readback validation
+- [x] MQTT and OPC-UA API, health, metrics, and dashboard evidence
 
 ## v0.7 — Observability Platform
 
