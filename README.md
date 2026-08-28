@@ -11,7 +11,38 @@ ORL models two operational domains on one shared reliability core:
 - **Mission Operations** — ground systems, telemetry, command, tracking, network redundancy, continuity, failover, and readiness
 - **Factory Operations** — equipment lifecycles, material flow, MES dependencies, lot/wafer execution, MQTT equipment messaging, and OPC-UA session health
 
+![Orbital Reliability Lab v0.6.0 Mission Operations overview](docs/screenshots/orl-overview.webp)
+
 ORL is an independent engineering portfolio project. It is **not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries**, and it does not reproduce proprietary systems or processes.
+
+## Reliability in Action
+
+ORL is built around one shared incident-response contract:
+
+`INJECT → DETECT → DIAGNOSE → ISOLATE → RECOVER → VALIDATE → EVIDENCE`
+
+The dashboard is intentionally operator-facing: failures change system state, dependencies, readiness, communications health, production flow, and retained incident evidence rather than only changing a single synthetic metric.
+
+### Mission network readiness
+
+![Mission Network Model showing validated telemetry continuity and mission readiness](docs/screenshots/mission-network-ready.webp)
+
+Mission Operations models redundant ground and telemetry paths, deterministic frame continuity, dependency health, failover timing, and a separate readiness decision. In the nominal state above, the active route is validated end-to-end:
+
+`GS-A → TEL-GW-01 → NET-CORE-01 → MDB-01`
+
+### Operational state and dependency modeling
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/mission-ops-model.webp" alt="Mission Operations system state and dependency model"></td>
+<td width="50%"><img src="docs/screenshots/incident-evidence.webp" alt="Incident evidence, fault controls, and reliability lifecycle"></td>
+</tr>
+<tr>
+<td><strong>System state & dependencies</strong><br>Primary/standby roles, asset health, active path, affected systems, and operator-facing impact are modeled separately from raw telemetry.</td>
+<td><strong>Incident evidence</strong><br>Controlled fault injection, event evidence, manual/automatic recovery, and the full reliability lifecycle remain visible to the operator.</td>
+</tr>
+</table>
 
 ## v0.6.0 — Industrial Communications
 
@@ -38,10 +69,6 @@ OPC-UA session-loss example:
 `ONLINE / ACTIVE → SESSION_LOST / LOST → BadSessionClosed → QUALITY HOLD → RECONNECTING / NEGOTIATING → Good READBACK → PASS`
 
 The MQTT broker and OPC-UA adapter are intentionally deterministic in-memory simulations. ORL does **not** claim a real broker, PLC, industrial controller, OPC-UA server, or factory integration.
-
-The shared response contract remains:
-
-`INJECT → DETECT → DIAGNOSE → ISOLATE → RECOVER → VALIDATE → EVIDENCE`
 
 ## Mission Operations
 
