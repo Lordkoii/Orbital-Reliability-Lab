@@ -11,7 +11,9 @@ ORL models two operational domains on one shared reliability core:
 - **Mission Operations** — ground systems, telemetry, command, tracking, network redundancy, continuity, failover, and readiness
 - **Factory Operations** — equipment lifecycles, material flow, MES dependencies, lot/wafer execution, MQTT equipment messaging, and OPC-UA session health
 
-![Orbital Reliability Lab v0.6.0 Mission Operations overview](docs/screenshots/orl-overview.webp)
+<p align="center">
+  <img src="docs/screenshots/orl-overview.webp" alt="Orbital Reliability Lab v0.6.0 Mission Operations overview" width="100%">
+</p>
 
 ORL is an independent engineering portfolio project. It is **not affiliated with SpaceX, Tesla, Starlink, Terafab, or their subsidiaries**, and it does not reproduce proprietary systems or processes.
 
@@ -25,7 +27,9 @@ The dashboard is intentionally operator-facing: failures change system state, de
 
 ### Mission network readiness
 
-![Mission Network Model showing validated telemetry continuity and mission readiness](docs/screenshots/mission-network-ready.webp)
+<p align="center">
+  <img src="docs/screenshots/mission-network-ready.webp" alt="Mission Network Model showing validated telemetry continuity and mission readiness" width="100%">
+</p>
 
 Mission Operations models redundant ground and telemetry paths, deterministic frame continuity, dependency health, failover timing, and a separate readiness decision. In the nominal state above, the active route is validated end-to-end:
 
@@ -33,16 +37,23 @@ Mission Operations models redundant ground and telemetry paths, deterministic fr
 
 ### Operational state and dependency modeling
 
-<table>
-<tr>
-<td width="50%"><img src="docs/screenshots/mission-ops-model.webp" alt="Mission Operations system state and dependency model"></td>
-<td width="50%"><img src="docs/screenshots/incident-evidence.webp" alt="Incident evidence, fault controls, and reliability lifecycle"></td>
-</tr>
-<tr>
-<td><strong>System state & dependencies</strong><br>Primary/standby roles, asset health, active path, affected systems, and operator-facing impact are modeled separately from raw telemetry.</td>
-<td><strong>Incident evidence</strong><br>Controlled fault injection, event evidence, manual/automatic recovery, and the full reliability lifecycle remain visible to the operator.</td>
-</tr>
-</table>
+#### System state & dependencies
+
+<p align="center">
+  <img src="docs/screenshots/mission-ops-model.webp" alt="Mission Operations system state and dependency model" width="100%">
+</p>
+
+Primary/standby roles, asset health, active path, affected systems, and operator-facing impact are modeled separately from raw telemetry.
+
+#### Incident evidence & reliability lifecycle
+
+<p align="center">
+  <img src="docs/screenshots/incident-evidence.webp" alt="Incident evidence, fault controls, and reliability lifecycle" width="100%">
+</p>
+
+Controlled fault injection, event evidence, manual/automatic recovery, and the full reliability lifecycle remain visible to the operator.
+
+> **Screenshot readability:** the README intentionally presents operator views at full content width. Open any image directly for its native-size view.
 
 ## v0.6.0 — Industrial Communications
 
